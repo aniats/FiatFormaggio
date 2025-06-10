@@ -39,8 +39,8 @@ type Valute struct {
 	VunitRate string `xml:"VunitRate"`
 }
 
-func getCBRData(date time.Time) ([]*domain.CurrencyRate, error) {
-	url := "https://www.cbr.ru/scripts/XML_daily.asp?date_req=10/06/2025"
+func (s *CBRService) GetCurrencyRates(ctx context.Context, date time.Time) ([]*domain.CurrencyRate, error) {
+	url := fmt.Sprintf("https://www.cbr.ru/scripts/XML_daily.asp?date_req=%s", date.Format("02/01/2006"))
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -88,12 +88,6 @@ func getCBRData(date time.Time) ([]*domain.CurrencyRate, error) {
 			Nominal:  nominal,
 		})
 	}
-
-	return rates, nil
-}
-
-func (s *CBRService) GetCurrencyRates(ctx context.Context, date time.Time) ([]*domain.CurrencyRate, error) {
-	rates, _ := getCBRData(date)
 
 	return rates, nil
 }
