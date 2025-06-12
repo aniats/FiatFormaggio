@@ -2,11 +2,11 @@ package domain
 
 import "time"
 
-type SavingAccount struct {
+type Deposit struct {
 	User                    User
 	Name                    string
 	AmountMinorUnits        int64
-	ExpirationDate          time.Time
 	InterestRateBasisPoints int64
-	CurrencyName
+	ExpirationDate          time.Time
+	CurrencyName            CurrencyName
 }
