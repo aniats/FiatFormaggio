@@ -1,3 +1,5 @@
+-- +goose Up
+-- +goose StatementBegin
 CREATE TYPE account_type_enum AS ENUM (
     'saving',
     'deposit',
@@ -14,7 +16,7 @@ CREATE TYPE currency_enum AS ENUM (
     'CNY',  -- Chinese Yuan (fen)
     'RSD',  -- Serbian Dinar (para)
     'XBT',  -- Bitcoin (satoshi)
-    'KZT',  -- Kazakhstani Tenge (tïin)
+    'KZT'   -- Kazakhstani Tenge (tiyn)
 );
 
 CREATE TYPE brokerage_type_enum AS ENUM (
@@ -47,8 +49,13 @@ INSERT INTO currency_minor_units VALUES
 CREATE TABLE users (
                        id BIGINT PRIMARY KEY,  -- Telegram user ID
                        username VARCHAR(255),  -- Telegram username (optional)
+                       first_name VARCHAR(255),
+                       last_name VARCHAR(255),
+                       language_code VARCHAR(10) DEFAULT 'en',
+                       timezone VARCHAR(50) DEFAULT 'UTC',
                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                       is_active BOOLEAN DEFAULT true
 );
 
 CREATE TABLE saving_accounts (
@@ -107,5 +114,91 @@ CREATE TABLE currency_rates (
                                 UNIQUE(currency, base_currency)
 );
 
+-- Helper functions
+CREATE OR REPLACE FUNCTION major_to_minor_units(
+    amount_major DECIMAL,
+    curr currency_enum
+) RETURNS BIGINT AS $$
+DECLARE
+multiplier INTEGER;
+BEGIN
+SELECT units_per_major INTO multiplier
+FROM currency_minor_units
+WHERE currency = curr;
 
+RETURN (amount_major * multiplier)::BIGINT;
+END;
+$$ LANGUAGE plpgsql;
 
+CREATE OR REPLACE FUNCTION minor_to_major_units(
+    amount_minor BIGINT,
+    curr currency_enum
+) RETURNS DECIMAL AS $$
+DECLARE
+divisor INTEGER;
+BEGIN
+SELECT units_per_major INTO divisor
+FROM currency_minor_units
+WHERE currency = curr;
+
+RETURN amount_minor::DECIMAL / divisor;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION basis_points_to_percentage(
+    basis_points INTEGER
+) RETURNS DECIMAL AS $$
+BEGIN
+RETURN basis_points::DECIMAL / 10000;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION percentage_to_basis_points(
+    percentage DECIMAL
+) RETURNS INTEGER AS $$
+BEGIN
+RETURN (percentage * 10000)::INTEGER;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Indexes
+CREATE INDEX idx_saving_accounts_user_id ON saving_accounts(user_id);
+CREATE INDEX idx_deposits_user_id ON deposits(user_id);
+CREATE INDEX idx_brokerage_accounts_user_id ON brokerage_accounts(user_id);
+CREATE INDEX idx_cash_holdings_user_id ON cash_holdings(user_id);
+CREATE INDEX idx_currency_rates_currency ON currency_rates(currency);
+CREATE INDEX idx_currency_rates_updated ON currency_rates(updated_at);
+CREATE INDEX idx_currency_rates_base ON currency_rates(base_currency);
+-- +goose StatementEnd
+
+-- +goose Down
+-- +goose StatementBegin
+-- Drop indexes
+DROP INDEX IF EXISTS idx_currency_rates_base;
+DROP INDEX IF EXISTS idx_currency_rates_updated;
+DROP INDEX IF EXISTS idx_currency_rates_currency;
+DROP INDEX IF EXISTS idx_cash_holdings_user_id;
+DROP INDEX IF EXISTS idx_brokerage_accounts_user_id;
+DROP INDEX IF EXISTS idx_deposits_user_id;
+DROP INDEX IF EXISTS idx_saving_accounts_user_id;
+
+-- Drop functions
+DROP FUNCTION IF EXISTS percentage_to_basis_points(DECIMAL);
+DROP FUNCTION IF EXISTS basis_points_to_percentage(INTEGER);
+DROP FUNCTION IF EXISTS minor_to_major_units(BIGINT, currency_enum);
+DROP FUNCTION IF EXISTS major_to_minor_units(DECIMAL, currency_enum);
+
+-- Drop tables (in reverse order due to foreign key constraints)
+DROP TABLE IF EXISTS currency_rates;
+DROP TABLE IF EXISTS cash_holdings;
+DROP TABLE IF EXISTS brokerage_accounts;
+DROP TABLE IF EXISTS deposits;
+DROP TABLE IF EXISTS saving_accounts;
+DROP TABLE IF EXISTS users;
+DROP TABLE IF EXISTS currency_minor_units;
+
+-- Drop enums (in reverse order)
+DROP TYPE IF EXISTS brokerage_type_enum;
+DROP TYPE IF EXISTS currency_enum;
+DROP TYPE IF EXISTS account_type_enum;
+-- +goose StatementEnd

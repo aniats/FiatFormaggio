@@ -37,4 +37,4 @@ dev-reset: migrate-reset migrate-up
 
 # Load environment
 include .env
-export;
+export $(shell sed 's/=.*//' .env)
