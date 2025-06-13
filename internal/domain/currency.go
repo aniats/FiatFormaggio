@@ -1,5 +1,10 @@
 package domain
 
+import (
+	"fmt"
+	"strings"
+)
+
 type CurrencyName string
 
 const (
@@ -34,4 +39,177 @@ type CurrencyRate struct {
 	RateMinorUnits int64
 	BaseCurrency   CurrencyName
 	Source         string
+}
+
+var currencyToHumanMap = map[CurrencyName]string{
+	USD: "US Dollar",
+	EUR: "Euro",
+	GBP: "British Pound",
+	JPY: "Japanese Yen",
+	RUB: "Russian Ruble",
+	CNY: "Chinese Yuan",
+	RSD: "Serbian Dinar",
+	XBT: "Bitcoin",
+	KZT: "Kazakhstani Tenge",
+}
+
+var currencyToHumanRussianMap = map[CurrencyName]string{
+	USD: "Доллар США",
+	EUR: "Евро",
+	GBP: "Британский фунт",
+	JPY: "Японская иена",
+	RUB: "Российский рубль",
+	CNY: "Китайский юань",
+	RSD: "Сербский динар",
+	XBT: "Биткоин",
+	KZT: "Казахстанский тенге",
+}
+
+var humanToCurrencyMap = map[string]CurrencyName{
+	"us dollar":         USD,
+	"usd":               USD,
+	"dollar":            USD,
+	"euro":              EUR,
+	"eur":               EUR,
+	"british pound":     GBP,
+	"gbp":               GBP,
+	"pound":             GBP,
+	"japanese yen":      JPY,
+	"jpy":               JPY,
+	"yen":               JPY,
+	"russian ruble":     RUB,
+	"rub":               RUB,
+	"ruble":             RUB,
+	"chinese yuan":      CNY,
+	"cny":               CNY,
+	"yuan":              CNY,
+	"serbian dinar":     RSD,
+	"rsd":               RSD,
+	"dinar":             RSD,
+	"bitcoin":           XBT,
+	"xbt":               XBT,
+	"btc":               XBT,
+	"kazakhstani tenge": KZT,
+	"kzt":               KZT,
+	"tenge":             KZT,
+}
+
+var humanToCurrencyRussianMap = map[string]CurrencyName{
+	"доллар сша":          USD,
+	"доллар":              USD,
+	"американский доллар": USD,
+	"евро":                EUR,
+	"британский фунт":     GBP,
+	"фунт":                GBP,
+	"японская иена":       JPY,
+	"иена":                JPY,
+	"российский рубль":    RUB,
+	"рубль":               RUB,
+	"китайский юань":      CNY,
+	"юань":                CNY,
+	"сербский динар":      RSD,
+	"динар":               RSD,
+	"биткоин":             XBT,
+	"биткойн":             XBT,
+	"казахстанский тенге": KZT,
+	"тенге":               KZT,
+}
+
+func (c CurrencyName) ToHuman() string {
+	if human, exists := currencyToHumanMap[c]; exists {
+		return human
+	}
+	return string(c)
+}
+
+func (c CurrencyName) ToHumanRussian() string {
+	if human, exists := currencyToHumanRussianMap[c]; exists {
+		return human
+	}
+	return string(c)
+}
+
+func (c CurrencyName) String() string {
+	return string(c)
+}
+
+func (c CurrencyName) IsValid() bool {
+	_, exists := currencyToHumanMap[c]
+	return exists
+}
+
+func (c CurrencyName) Symbol() string {
+	switch c {
+	case USD:
+		return "$"
+	case EUR:
+		return "€"
+	case GBP:
+		return "£"
+	case JPY:
+		return "¥"
+	case RUB:
+		return "₽"
+	case CNY:
+		return "¥"
+	case XBT:
+		return "₿"
+	default:
+		return string(c)
+	}
+}
+
+func CurrencyFromHuman(human string) (CurrencyName, error) {
+	normalized := strings.ToLower(strings.TrimSpace(human))
+
+	if currency, exists := humanToCurrencyMap[normalized]; exists {
+		return currency, nil
+	}
+
+	if currency, exists := humanToCurrencyRussianMap[normalized]; exists {
+		return currency, nil
+	}
+
+	upperHuman := strings.ToUpper(normalized)
+	if currency := CurrencyName(upperHuman); currency.IsValid() {
+		return currency, nil
+	}
+
+	return "", fmt.Errorf("unknown currency: %s", human)
+}
+
+func ParseCurrency(input string) (CurrencyName, error) {
+	return CurrencyFromHuman(input)
+}
+
+func AllCurrencies() []CurrencyName {
+	currencies := make([]CurrencyName, 0, len(currencyToHumanMap))
+	for currency := range currencyToHumanMap {
+		currencies = append(currencies, currency)
+	}
+	return currencies
+}
+
+func AllCurrencyNames() []string {
+	names := make([]string, 0, len(currencyToHumanMap))
+	for _, name := range currencyToHumanMap {
+		names = append(names, name)
+	}
+	return names
+}
+
+func AllCurrencyNamesRussian() []string {
+	names := make([]string, 0, len(currencyToHumanRussianMap))
+	for _, name := range currencyToHumanRussianMap {
+		names = append(names, name)
+	}
+	return names
+}
+
+func (c CurrencyName) FormatAmount(amount float64) string {
+	return fmt.Sprintf("%.2f %s (%s)", amount, c.Symbol(), c.ToHuman())
+}
+
+func (c CurrencyName) FormatAmountRussian(amount float64) string {
+	return fmt.Sprintf("%.2f %s (%s)", amount, c.Symbol(), c.ToHumanRussian())
 }
