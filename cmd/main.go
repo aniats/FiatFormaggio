@@ -3,23 +3,29 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/aniats/FiatFormaggio/internal/service/cbr"
+	"github.com/aniats/FiatFormaggio/internal/service/finance"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/joho/godotenv"
 
+	"github.com/aniats/FiatFormaggio/internal/app"
 	"github.com/aniats/FiatFormaggio/internal/domain"
 	"github.com/aniats/FiatFormaggio/internal/repository"
-	"github.com/aniats/FiatFormaggio/internal/service"
 )
 
 func main() {
+	// Load environment variables
 	if err := godotenv.Load(); err != nil {
 		log.Fatal("Error loading .env file")
 	}
 
+	// Initialize dependencies
 	repo, err := initRepository()
 	if err != nil {
 		log.Fatalf("Failed to initialize repository: %v", err)
@@ -30,21 +36,24 @@ func main() {
 		}
 	}()
 
+	// Initialize services
 	cbrService := initCBRService()
-	financeService := service.NewFinanceService(repo, cbrService)
+	financeService := finance.NewFinanceService(repo, cbrService) // Now uses repository.Repository interface
 
+	// Create application context
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// Test the services
 	if err := testServices(ctx, financeService, cbrService); err != nil {
 		log.Printf("Service test error: %v", err)
 	}
 
 	// Initialize and start bot (when ready)
-	// token := os.Getenv("TELEGRAM_BOT_TOKEN")
-	// if err := startBot(ctx, token, financeService); err != nil {
-	// 	log.Fatalf("Failed to start bot: %v", err)
-	// }
+	token := os.Getenv("TELEGRAM_BOT_TOKEN")
+	if err := startBot(ctx, token, financeService); err != nil {
+		log.Fatalf("Failed to start bot: %v", err)
+	}
 
 	log.Println("Application started successfully")
 }
@@ -74,18 +83,18 @@ func initRepository() (repository.Repository, error) {
 }
 
 // initCBRService initializes the CBR service
-func initCBRService() *service.CBRService {
+func initCBRService() *cbr.CBRService {
 	httpClient := &http.Client{
 		Timeout: 10 * time.Second,
 	}
 
-	cbrService := service.NewCBRService(httpClient)
+	cbrService := cbr.NewCBRService(httpClient)
 	log.Println("CBR service initialized successfully")
 	return cbrService
 }
 
 // testServices performs basic tests on the services
-func testServices(ctx context.Context, financeService *service.FinanceService, cbrService *service.CBRService) error {
+func testServices(ctx context.Context, financeService *finance.FinanceService, cbrService *cbr.CBRService) error {
 	// Test finance service
 	userID := domain.UserId(123456789)
 	deposits, err := financeService.GetDepositsByUserID(ctx, userID)
@@ -104,23 +113,31 @@ func testServices(ctx context.Context, financeService *service.FinanceService, c
 	return nil
 }
 
-func startBot(ctx context.Context, token string, financeService *service.FinanceService) error {
+// startBot initializes and starts the Telegram bot (when ready to use)
+func startBot(ctx context.Context, token string, financeService *finance.FinanceService) error {
 	if token == "" {
 		return fmt.Errorf("TELEGRAM_BOT_TOKEN environment variable is required")
 	}
 
-	// Uncomment when bot package is ready
-	// bot, err := app.NewBot(token, financeService)
-	// if err != nil {
-	// 	return fmt.Errorf("failed to create bot: %w", err)
-	// }
+	bot, err := app.NewBotFromToken(token, financeService)
+	if err != nil {
+		return fmt.Errorf("failed to create bot: %w", err)
+	}
+	defer bot.Stop()
 
-	// go func() {
-	// 	if err := bot.Start(ctx); err != nil {
-	// 		log.Printf("Bot error: %v", err)
-	// 	}
-	// }()
+	go func() {
+		if err := bot.Start(ctx); err != nil {
+			log.Printf("Bot error: %v", err)
+		}
+	}()
 
 	log.Println("Bot started successfully")
+
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	<-c
+
+	log.Println("Shutting down...")
+
 	return nil
 }
