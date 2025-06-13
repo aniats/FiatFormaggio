@@ -3,10 +3,11 @@ package domain
 import "time"
 
 type Deposit struct {
-	User                    User
+	Id                      int64
+	UserId                  UserId
 	Name                    string
 	AmountMinorUnits        int64
 	InterestRateBasisPoints int64
-	ExpirationDate          time.Time
-	CurrencyName            CurrencyName
+	ExpirationDate          *time.Time
+	Currency                CurrencyName
 }

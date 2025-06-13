@@ -9,11 +9,13 @@ import (
 	_ "github.com/lib/pq"
 )
 
+// PostgresRepository implements the Repository interface
 type PostgresRepository struct {
 	db *sql.DB
 }
 
-func NewPostgresRepository(connString string) (*PostgresRepository, error) {
+// NewPostgresRepository - creates a new PostgreSQL repository instance
+func NewPostgresRepository(connString string) (Repository, error) {
 	db, err := sql.Open("postgres", connString)
 	if err != nil {
 		return nil, fmt.Errorf("couldn't establish a successful connection to database: %v", err)
@@ -29,35 +31,15 @@ func NewPostgresRepository(connString string) (*PostgresRepository, error) {
 	return &PostgresRepository{db: db}, nil
 }
 
-func (r *PostgresRepository) Init(ctx context.Context) error {
-	_, err := r.db.ExecContext(ctx, `
-		CREATE TABLE IF NOT EXISTS accounts (
-			id SERIAL PRIMARY KEY,
-			name TEXT NOT NULL,
-			type TEXT NOT NULL,
-			balance DECIMAL(15,2) NOT NULL,
-			currency TEXT NOT NULL,
-			interest DECIMAL(5,2),
-			created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-			updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-		);
-		
-		CREATE TABLE IF NOT EXISTS transactions (
-			id SERIAL PRIMARY KEY,
-			account_id INTEGER REFERENCES accounts(id),
-			amount DECIMAL(15,2) NOT NULL,
-			description TEXT,
-			created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-		);
-		
-		CREATE TABLE IF NOT EXISTS profits (
-			id SERIAL PRIMARY KEY,
-			date DATE NOT NULL,
-			amount DECIMAL(15,2) NOT NULL,
-			account_id INTEGER REFERENCES accounts(id),
-			created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-		);
-	`)
-
-	return err
+// Close closes the database connection
+func (repo *PostgresRepository) Close() error {
+	return repo.db.Close()
 }
+
+// HealthCheck verifies the database connection is healthy
+func (repo *PostgresRepository) HealthCheck(ctx context.Context) error {
+	return repo.db.PingContext(ctx)
+}
+
+// Compile-time check to ensure PostgresRepository implements Repository interface
+var _ Repository = (*PostgresRepository)(nil)

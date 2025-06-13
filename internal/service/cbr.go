@@ -39,7 +39,7 @@ type Valute struct {
 	VunitRate string `xml:"VunitRate"`
 }
 
-func (s *CBRService) GetCurrencyRates(ctx context.Context, date time.Time) ([]*domain.CurrencyRate, error) {
+func (s *CBRService) GetCurrencyRates(ctx context.Context, date time.Time) ([]*domain.CurrencyRateCBR, error) {
 	url := fmt.Sprintf("https://www.cbr.ru/scripts/XML_daily.asp?date_req=%s", date.Format("02/01/2006"))
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -68,7 +68,7 @@ func (s *CBRService) GetCurrencyRates(ctx context.Context, date time.Time) ([]*d
 		return nil, fmt.Errorf("failed to decode XML: %w", err)
 	}
 
-	var rates []*domain.CurrencyRate
+	var rates []*domain.CurrencyRateCBR
 	for _, valute := range valCurs.Valutes {
 		valueStr := strings.Replace(valute.Value, ",", ".", -1)
 		value, err := strconv.ParseFloat(valueStr, 64)
@@ -81,7 +81,7 @@ func (s *CBRService) GetCurrencyRates(ctx context.Context, date time.Time) ([]*d
 			continue
 		}
 
-		rates = append(rates, &domain.CurrencyRate{
+		rates = append(rates, &domain.CurrencyRateCBR{
 			CharCode: valute.CharCode,
 			Name:     valute.Name,
 			Value:    value,

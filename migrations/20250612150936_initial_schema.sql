@@ -51,7 +51,7 @@ CREATE TABLE users (
                        username VARCHAR(255),  -- Telegram username (optional)
                        first_name VARCHAR(255),
                        last_name VARCHAR(255),
-                       language_code VARCHAR(10) DEFAULT 'en',
+                       language_code VARCHAR(10) DEFAULT 'ru',
                        timezone VARCHAR(50) DEFAULT 'UTC',
                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
