@@ -2,7 +2,9 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"github.com/aniats/FiatFormaggio/internal/service/finance/models"
+
 	"log"
 	"strings"
 	"sync"
@@ -37,6 +39,7 @@ type Bot struct {
 	botAPI         BotAPI
 	financeService FinanceService
 	workerPool     *WorkerPool
+	sessionManager *UserSessionManager
 }
 
 type WorkerPool struct {
@@ -56,6 +59,7 @@ func NewBot(botAPI BotAPI, financeService FinanceService) *Bot {
 		botAPI:         botAPI,
 		financeService: financeService,
 		workerPool:     NewWorkerPool(DefaultWorkerPoolSize),
+		sessionManager: NewUserSessionManager(),
 	}
 }
 
@@ -127,7 +131,7 @@ func (b *Bot) handleMessage(ctx context.Context, message *tgbotapi.Message) {
 	case "deposits", "депозиты", "вклады":
 		b.handleDepositsCommand(ctx, chatID, domain.UserId(message.From.ID))
 	case "create_deposit", "добавить_депозит":
-		b.handleCreateDeposit(ctx, message)
+		b.startSession(ctx, message, SessionCreateDeposit)
 	default:
 		b.sendMessage(chatID, "Неизвестная команда. Введите /help для списка команд.")
 	}
@@ -141,6 +145,22 @@ func (b *Bot) handleHelp(chatID int64) {
 	`
 
 	b.sendMessage(chatID, helpText)
+}
+
+func (b *Bot) startSession(ctx context.Context, msg *tgbotapi.Message, sessionType SessionType) {
+	userID := domain.UserId(msg.From.ID)
+	chatID := msg.Chat.ID
+
+	session, err := b.sessionManager.StartSession(userID, chatID, sessionType)
+	if err != nil {
+		b.sendMessage(chatID, fmt.Sprintf("❌ Не удалось начать сессию: %s", err.Error()))
+		return
+	}
+
+	if err := session.Handler.HandleStep(ctx, b, session, msg); err != nil {
+		b.sendMessage(chatID, fmt.Sprintf("❌ Ошибка: %s", err.Error()))
+		b.sessionManager.ClearSession(userID)
+	}
 }
 
 func NewWorkerPool(workers int) *WorkerPool {

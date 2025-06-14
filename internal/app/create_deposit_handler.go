@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/aniats/FiatFormaggio/internal/domain"
+	"github.com/aniats/FiatFormaggio/internal/service/finance/models"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"strconv"
 	"strings"
@@ -148,7 +149,6 @@ func (h *DepositCreationHandler) handleCurrency(bot *Bot, session *UserSession, 
 	return nil
 }
 
-// sendInterestRatePrompt sends the interest rate input prompt
 func (h *DepositCreationHandler) sendInterestRatePrompt(bot *Bot, session *UserSession) {
 	currency := session.GetData("currency").(domain.CurrencyName)
 
@@ -168,7 +168,6 @@ func (h *DepositCreationHandler) sendInterestRatePrompt(bot *Bot, session *UserS
 func (h *DepositCreationHandler) handleInterestRate(bot *Bot, session *UserSession, input string) error {
 	rateStr := strings.TrimSpace(input)
 
-	// Handle skip
 	if strings.ToLower(rateStr) == "пропустить" || rateStr == "" {
 		session.CurrentStep = StepDate
 		h.sendExpirationDatePrompt(bot, session)
@@ -212,7 +211,6 @@ func (h *DepositCreationHandler) sendExpirationDatePrompt(bot *Bot, session *Use
 func (h *DepositCreationHandler) handleExpirationDate(bot *Bot, session *UserSession, input string) error {
 	dateStr := strings.TrimSpace(input)
 
-	// Handle skip
 	if strings.ToLower(dateStr) == "пропустить" || dateStr == "" {
 		session.CurrentStep = StepConfirmation
 		h.sendConfirmationPrompt(bot, session)
@@ -297,10 +295,8 @@ func (h *DepositCreationHandler) FormatConfirmation(session *UserSession) string
 	return text
 }
 
-// CompleteSession creates the deposit and completes the session
 func (h *DepositCreationHandler) CompleteSession(ctx context.Context, bot *Bot, session *UserSession) error {
-	// Build request from session data
-	req := &CreateDepositRequest{
+	req := &models.CreateDepositRequest{
 		UserID:    session.UserID,
 		Name:      session.GetString("name"),
 		AmountRUB: session.GetFloat("amount"),
@@ -315,7 +311,6 @@ func (h *DepositCreationHandler) CompleteSession(ctx context.Context, bot *Bot, 
 		req.ExpirationDate = date
 	}
 
-	// Create deposit
 	deposit, err := bot.financeService.CreateDeposit(ctx, req)
 	if err != nil {
 		bot.sendMessage(session.ChatID, fmt.Sprintf("❌ Ошибка при создании депозита: %s", err.Error()))
@@ -405,10 +400,8 @@ func (h *DepositCreationHandler) sendDepositCreatedConfirmation(bot *Bot, chatID
 	text += fmt.Sprintf("📋 Название: %s\n", deposit.Name)
 	text += fmt.Sprintf("💰 Сумма: %.2f %s\n", amount, deposit.Currency)
 
-	if deposit.InterestRateBasisPoints != nil {
-		rate := float64(deposit.InterestRateBasisPoints) / 100.0
-		text += fmt.Sprintf("📈 Процентная ставка: %.2f%%\n", rate)
-	}
+	rate := float64(deposit.InterestRateBasisPoints) / 100.0
+	text += fmt.Sprintf("📈 Процентная ставка: %.2f%%\n", rate)
 
 	if deposit.ExpirationDate != nil {
 		text += fmt.Sprintf("📅 Дата окончания: %s\n", deposit.ExpirationDate.Format("02.01.2006"))
