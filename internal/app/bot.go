@@ -33,6 +33,7 @@ type BotAPI interface {
 type FinanceService interface {
 	GetDepositsByUserID(ctx context.Context, userID domain.UserId) ([]domain.Deposit, error)
 	CreateDeposit(ctx context.Context, req *models.CreateDepositRequest) (*domain.Deposit, error)
+	EnsureUserExists(ctx context.Context, userID domain.UserId, username string) (bool, error)
 }
 
 type Bot struct {
@@ -124,6 +125,25 @@ func (b *Bot) handleMessage(ctx context.Context, message *tgbotapi.Message) {
 
 	command := strings.ToLower(message.Command())
 	chatID := message.Chat.ID
+	userID := domain.UserId(message.From.ID)
+
+	telegramUsername := message.From.UserName
+
+	isNewUser, err := b.financeService.EnsureUserExists(ctx, userID, telegramUsername)
+	if err != nil {
+		log.Printf("Failed to ensure user exists for userID %d: %v", userID, err)
+		b.sendMessage(chatID, "❌ Ошибка инициализации пользователя. Попробуйте позже.")
+		return
+	}
+
+	if isNewUser {
+		b.sendMessage(chatID, "🎉 Добро пожаловать! Вы зарегистрированы в системе. Введите /help для начала работы.")
+	}
+
+	if session := b.sessionManager.GetSession(userID); session != nil {
+		b.handleSessionMessage(ctx, message, session)
+		return
+	}
 
 	switch command {
 	case "start", "help":
@@ -161,6 +181,24 @@ func (b *Bot) startSession(ctx context.Context, msg *tgbotapi.Message, sessionTy
 		b.sendMessage(chatID, fmt.Sprintf("❌ Ошибка: %s", err.Error()))
 		b.sessionManager.ClearSession(userID)
 	}
+}
+
+func (b *Bot) handleSessionMessage(ctx context.Context, msg *tgbotapi.Message, session *UserSession) {
+	b.sessionManager.UpdateLastActivity(session.UserID)
+
+	if strings.ToLower(msg.Text) == "/cancel" || strings.ToLower(msg.Text) == "отмена" {
+		b.cancelSession(session.UserID, session.ChatID)
+		return
+	}
+
+	if err := session.Handler.HandleStep(ctx, b, session, msg); err != nil {
+		b.sendMessage(session.ChatID, fmt.Sprintf("❌ Ошибка: %s", err.Error()))
+	}
+}
+
+func (b *Bot) cancelSession(userID domain.UserId, chatID int64) {
+	b.sessionManager.ClearSession(userID)
+	b.sendMessage(chatID, "❌ Операция отменена.")
 }
 
 func NewWorkerPool(workers int) *WorkerPool {

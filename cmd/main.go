@@ -20,12 +20,10 @@ import (
 )
 
 func main() {
-	// Load environment variables
 	if err := godotenv.Load(); err != nil {
 		log.Fatal("Error loading .env file")
 	}
 
-	// Initialize dependencies
 	repo, err := initRepository()
 	if err != nil {
 		log.Fatalf("Failed to initialize repository: %v", err)
@@ -36,20 +34,16 @@ func main() {
 		}
 	}()
 
-	// Initialize services
 	cbrService := initCBRService()
 	financeService := finance.NewFinanceService(repo, cbrService) // Now uses repository.Repository interface
 
-	// Create application context
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Test the services
 	if err := testServices(ctx, financeService, cbrService); err != nil {
 		log.Printf("Service test error: %v", err)
 	}
 
-	// Initialize and start bot (when ready)
 	token := os.Getenv("TELEGRAM_BOT_TOKEN")
 	if err := startBot(ctx, token, financeService); err != nil {
 		log.Fatalf("Failed to start bot: %v", err)
@@ -58,7 +52,6 @@ func main() {
 	log.Println("Application started successfully")
 }
 
-// initRepository initializes the repository with proper error handling
 func initRepository() (repository.Repository, error) {
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
@@ -70,7 +63,6 @@ func initRepository() (repository.Repository, error) {
 		return nil, fmt.Errorf("failed to create repository: %w", err)
 	}
 
-	// Test the connection
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -82,7 +74,6 @@ func initRepository() (repository.Repository, error) {
 	return repo, nil
 }
 
-// initCBRService initializes the CBR service
 func initCBRService() *cbr.CBRService {
 	httpClient := &http.Client{
 		Timeout: 10 * time.Second,
@@ -93,9 +84,7 @@ func initCBRService() *cbr.CBRService {
 	return cbrService
 }
 
-// testServices performs basic tests on the services
 func testServices(ctx context.Context, financeService *finance.FinanceService, cbrService *cbr.CBRService) error {
-	// Test finance service
 	userID := domain.UserId(123456789)
 	deposits, err := financeService.GetDepositsByUserID(ctx, userID)
 	if err != nil {
@@ -103,7 +92,6 @@ func testServices(ctx context.Context, financeService *finance.FinanceService, c
 	}
 	log.Printf("Successfully retrieved %d deposits for user %d", len(deposits), userID)
 
-	// Test CBR service
 	rates, err := cbrService.GetCurrencyRates(ctx, time.Now())
 	if err != nil {
 		return fmt.Errorf("failed to get currency rates: %w", err)
@@ -113,7 +101,6 @@ func testServices(ctx context.Context, financeService *finance.FinanceService, c
 	return nil
 }
 
-// startBot initializes and starts the Telegram bot (when ready to use)
 func startBot(ctx context.Context, token string, financeService *finance.FinanceService) error {
 	if token == "" {
 		return fmt.Errorf("TELEGRAM_BOT_TOKEN environment variable is required")

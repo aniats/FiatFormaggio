@@ -318,15 +318,12 @@ func (h *DepositCreationHandler) CompleteSession(ctx context.Context, bot *Bot, 
 		return err
 	}
 
-	// Send success confirmation
 	h.sendDepositCreatedConfirmation(bot, session.ChatID, deposit)
 
-	// Clear session
 	bot.sessionManager.ClearSession(session.UserID)
 	return nil
 }
 
-// Validation methods
 func (h *DepositCreationHandler) validateName(name string) error {
 	if name == "" {
 		return fmt.Errorf("название не может быть пустым")

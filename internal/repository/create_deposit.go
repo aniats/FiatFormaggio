@@ -6,7 +6,6 @@ import (
 	"github.com/aniats/FiatFormaggio/internal/domain"
 )
 
-// CreateDeposit - creates a new deposit for a user
 func (repo *PostgresRepository) CreateDeposit(ctx context.Context, deposit *domain.Deposit) error {
 	query := `
         INSERT INTO deposits (
@@ -19,7 +18,7 @@ func (repo *PostgresRepository) CreateDeposit(ctx context.Context, deposit *doma
         ) VALUES ($1, $2, $3, $4, $5, $6)
 	`
 
-	err := repo.db.QueryRowContext(
+	_, err := repo.db.ExecContext(
 		ctx,
 		query,
 		deposit.UserId,
