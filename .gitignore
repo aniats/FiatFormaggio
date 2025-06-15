@@ -27,6 +27,10 @@ go.work.sum
 # env file
 .env
 
+# SSH keys to VM
+terraform/id_ed25519
+terraform/id_ed25519.pub
+
 # Editor/IDE
 .idea
 .vscode
