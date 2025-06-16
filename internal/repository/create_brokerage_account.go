@@ -16,10 +16,9 @@ func (repo *PostgresRepository) CreateBrokerageAccount(ctx context.Context, acco
             currency, 
             broker_name, 
             account_type
-        ) VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING id, created_at, updated_at`
+        ) VALUES ($1, $2, $3, $4, $5, $6)`
 
-	err := repo.db.QueryRowContext(
+	_, err := repo.db.ExecContext(
 		ctx,
 		query,
 		account.UserId,

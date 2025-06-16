@@ -33,6 +33,8 @@ type BotAPI interface {
 type FinanceService interface {
 	GetDepositsByUserID(ctx context.Context, userID domain.UserId) ([]domain.Deposit, error)
 	CreateDeposit(ctx context.Context, req *models.CreateDepositRequest) (*domain.Deposit, error)
+	GetBrokerageAccountsByUserID(ctx context.Context, userID domain.UserId) ([]domain.BrokerageAccount, error)
+	CreateBrokerageAccount(ctx context.Context, req *models.CreateBrokerageAccountRequest) (*domain.BrokerageAccount, error)
 	EnsureUserExists(ctx context.Context, userID domain.UserId, username string) (bool, error)
 }
 
@@ -158,6 +160,10 @@ func (b *Bot) handleMessage(ctx context.Context, message *tgbotapi.Message) {
 		b.handleDepositsCommand(ctx, chatID, domain.UserId(message.From.ID))
 	case "create_deposit", "добавить_депозит":
 		b.startSession(ctx, message, SessionCreateDeposit)
+	case "brokerage_accounts", "брокерские_счета", "счета":
+		b.handleBrokerageAccountsCommand(ctx, chatID, domain.UserId(message.From.ID))
+	case "create_brokerage_account", "создать_брокерский_счет":
+		b.startSession(ctx, message, SessionCreateBrokerageAccountSession)
 	case "rates", "курсы", "валюты":
 		b.handleCurrencyRatesCommand(ctx, chatID)
 	default:
@@ -170,6 +176,8 @@ func (b *Bot) handleHelp(chatID int64) {
 		/total - Общий баланс
 		/deposits - Показать депозиты
 		/create_deposit - Создать депозит
+		/brokerage_accounts - Показать брокерские счета
+		/create_brokerage_account - Создать брокерский счет
 		/rates - Курсы валют ЦБ РФ
 	`
 

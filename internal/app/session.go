@@ -65,6 +65,7 @@ func NewUserSessionManager() *UserSessionManager {
 
 	// Register session handlers
 	manager.RegisterHandler(&DepositCreationHandler{})
+	manager.RegisterHandler(&BrokerageAccountCreationHandler{})
 	// Add more handlers as needed:
 	// manager.RegisterHandler(&ExpenseCreationHandler{})
 	// manager.RegisterHandler(&TransferHandler{})

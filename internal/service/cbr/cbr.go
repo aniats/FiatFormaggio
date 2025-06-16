@@ -79,7 +79,6 @@ func (s *CBRService) GetCurrencyRates(ctx context.Context, date time.Time) ([]*d
 	return rates, nil
 }
 
-// parseValuteToRate converts a Valute XML element to domain.CurrencyRateCBR
 func (s *CBRService) parseValuteToRate(valute Valute) (*domain.CurrencyRateCBR, error) {
 	valueStr := strings.Replace(valute.Value, ",", ".", -1)
 	value, err := strconv.ParseFloat(valueStr, 64)
