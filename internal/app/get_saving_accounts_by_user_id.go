@@ -1,0 +1,44 @@
+package app
+
+import (
+	"context"
+	"fmt"
+	"github.com/aniats/FiatFormaggio/internal/domain"
+	"log"
+)
+
+func (b *Bot) handleSavingAccountsCommand(ctx context.Context, chatID int64, userID domain.UserId) {
+	accounts, err := b.financeService.GetSavingAccountsByUserID(ctx, userID)
+	if err != nil {
+		log.Printf("Ошибка при получении накопительных счетов для пользователя %d: %v", userID, err)
+		b.sendMessage(chatID, "❌ Ошибка при получении накопительных счетов. Попробуйте позже.")
+		return
+	}
+
+	if len(accounts) == 0 {
+		b.sendMessage(chatID, "📭 У вас пока нет сохраненных накопительных счетов.\n\nСоздайте первый счет: /create_saving_account")
+		return
+	}
+
+	text := "💰 Ваши накопительные счета:\n\n"
+	for i, account := range accounts {
+		amount := float64(account.AmountMinorUnits) / defaultMinorUnits
+		interestRate := float64(account.InterestRateBasisPoints) / 100.0
+
+		text += fmt.Sprintf("%d. %s\n", i+1, account.Name)
+		text += fmt.Sprintf("   💰 %s\n", formatAmount(amount, account.Currency.String()))
+		
+		if interestRate > 0 {
+			text += fmt.Sprintf("   📈 %.2f%%/год\n", interestRate)
+		}
+
+		if account.ExpirationDate != nil {
+			text += fmt.Sprintf("   📅 До: %s\n", account.ExpirationDate.Format("02.01.2006"))
+		}
+		text += "\n"
+	}
+
+	text += fmt.Sprintf("📊 Всего счетов: %d", len(accounts))
+
+	b.sendMessage(chatID, text)
+}

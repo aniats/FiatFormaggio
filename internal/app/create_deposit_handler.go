@@ -257,6 +257,8 @@ func (h *DepositCreationHandler) handleConfirmation(ctx context.Context, bot *Bo
 		return nil
 	}
 
+	// Prevent double execution by clearing session first
+	bot.sessionManager.ClearSession(session.UserID)
 	return h.CompleteSession(ctx, bot, session)
 }
 
@@ -320,7 +322,6 @@ func (h *DepositCreationHandler) CompleteSession(ctx context.Context, bot *Bot, 
 
 	h.sendDepositCreatedConfirmation(bot, session.ChatID, deposit)
 
-	bot.sessionManager.ClearSession(session.UserID)
 	return nil
 }
 

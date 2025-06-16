@@ -313,6 +313,8 @@ func (h *BrokerageAccountCreationHandler) handleConfirmation(ctx context.Context
 		return nil
 	}
 
+	// Prevent double execution by clearing session first
+	bot.sessionManager.ClearSession(session.UserID)
 	return h.CompleteSession(ctx, bot, session)
 }
 
@@ -357,7 +359,6 @@ func (h *BrokerageAccountCreationHandler) CompleteSession(ctx context.Context, b
 		h.formatAccountType(account.AccountType))
 
 	bot.sendMessage(session.ChatID, text)
-	bot.sessionManager.ClearSession(session.UserID)
 	return nil
 }
 

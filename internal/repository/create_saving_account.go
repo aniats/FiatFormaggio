@@ -19,7 +19,7 @@ func (repo *PostgresRepository) CreateSavingAccount(ctx context.Context, account
         ) VALUES ($1, $2, $3, $4, $5, $6)
 	`
 
-	err := repo.db.QueryRowContext(
+	_, err := repo.db.ExecContext(
 		ctx,
 		query,
 		account.UserId,

@@ -4,7 +4,7 @@ import "time"
 
 type SavingAccount struct {
 	Id                      int64
-	UserId                  User
+	UserId                  UserId
 	Name                    string
 	AmountMinorUnits        int64
 	ExpirationDate          *time.Time
