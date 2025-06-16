@@ -27,7 +27,8 @@ go.work.sum
 # env file
 .env
 
-# SSH keys to VM
+# Terraform related stuff
+terraform/.terraform
 terraform/id_ed25519
 terraform/id_ed25519.pub
 
