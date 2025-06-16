@@ -45,7 +45,7 @@ func main() {
 	}
 
 	token := os.Getenv("TELEGRAM_BOT_TOKEN")
-	if err := startBot(ctx, token, financeService); err != nil {
+	if err := startBot(ctx, token, financeService, cbrService); err != nil {
 		log.Fatalf("Failed to start bot: %v", err)
 	}
 
@@ -101,12 +101,12 @@ func testServices(ctx context.Context, financeService *finance.FinanceService, c
 	return nil
 }
 
-func startBot(ctx context.Context, token string, financeService *finance.FinanceService) error {
+func startBot(ctx context.Context, token string, financeService *finance.FinanceService, cbrService *cbr.CBRService) error {
 	if token == "" {
 		return fmt.Errorf("TELEGRAM_BOT_TOKEN environment variable is required")
 	}
 
-	bot, err := app.NewBotFromToken(token, financeService)
+	bot, err := app.NewBotFromToken(token, financeService, cbrService)
 	if err != nil {
 		return fmt.Errorf("failed to create bot: %w", err)
 	}

@@ -36,9 +36,14 @@ type FinanceService interface {
 	EnsureUserExists(ctx context.Context, userID domain.UserId, username string) (bool, error)
 }
 
+type CBRService interface {
+	GetCurrencyRates(ctx context.Context, date time.Time) ([]*domain.CurrencyRateCBR, error)
+}
+
 type Bot struct {
 	botAPI         BotAPI
 	financeService FinanceService
+	cbrService     CBRService
 	workerPool     *WorkerPool
 	sessionManager *UserSessionManager
 }
@@ -55,22 +60,23 @@ type Job struct {
 	bot     *Bot
 }
 
-func NewBot(botAPI BotAPI, financeService FinanceService) *Bot {
+func NewBot(botAPI BotAPI, financeService FinanceService, cbrService CBRService) *Bot {
 	return &Bot{
 		botAPI:         botAPI,
 		financeService: financeService,
+		cbrService:     cbrService,
 		workerPool:     NewWorkerPool(DefaultWorkerPoolSize),
 		sessionManager: NewUserSessionManager(),
 	}
 }
 
-func NewBotFromToken(token string, financeService FinanceService) (*Bot, error) {
+func NewBotFromToken(token string, financeService FinanceService, cbrService CBRService) (*Bot, error) {
 	botAPI, err := NewTelegramBotAPI(token)
 	if err != nil {
 		return nil, err
 	}
 
-	return NewBot(botAPI, financeService), nil
+	return NewBot(botAPI, financeService, cbrService), nil
 }
 
 func (b *Bot) Start(ctx context.Context) error {
@@ -152,6 +158,8 @@ func (b *Bot) handleMessage(ctx context.Context, message *tgbotapi.Message) {
 		b.handleDepositsCommand(ctx, chatID, domain.UserId(message.From.ID))
 	case "create_deposit", "добавить_депозит":
 		b.startSession(ctx, message, SessionCreateDeposit)
+	case "rates", "курсы", "валюты":
+		b.handleCurrencyRatesCommand(ctx, chatID)
 	default:
 		b.sendMessage(chatID, "Неизвестная команда. Введите /help для списка команд.")
 	}
@@ -162,6 +170,7 @@ func (b *Bot) handleHelp(chatID int64) {
 		/total - Общий баланс
 		/deposits - Показать депозиты
 		/create_deposit - Создать депозит
+		/rates - Курсы валют ЦБ РФ
 	`
 
 	b.sendMessage(chatID, helpText)
