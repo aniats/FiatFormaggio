@@ -14,13 +14,11 @@ func (s *FinanceService) CreateCashHolding(ctx context.Context, req *models.Crea
 		return nil, fmt.Errorf("validation failed: %w", err)
 	}
 
-	// Parse and validate currency
 	currency, err := s.validateAndNormalizeCurrency(req.Currency)
 	if err != nil {
 		return nil, fmt.Errorf("invalid currency: %w", err)
 	}
 
-	// Convert amount to minor units
 	amountMinorUnits := int64(req.AmountRUB * 100)
 
 	cashHolding := &domain.CashHolding{

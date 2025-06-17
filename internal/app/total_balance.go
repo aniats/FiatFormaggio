@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sort"
 
+	"strings"
+
 	"github.com/aniats/FiatFormaggio/internal/domain"
 )
 
@@ -68,7 +70,7 @@ func (b *Bot) sendTotalBalanceCommand(ctx context.Context, chatID int64, userID 
 		grandTotalRUB += totalRUB
 	}
 
-	message += fmt.Sprintf("🎯 ИТОГО: %.2f ₽\n", grandTotalRUB)
+	message += fmt.Sprintf("🎯 ИТОГО: %s ₽\n", formatNumber(grandTotalRUB))
 	b.sendMessage(chatID, message)
 }
 
@@ -173,15 +175,35 @@ func formatAccountSummary(accountType string, count int64, currencyTotals map[do
 
 	for _, currency := range currencies {
 		amount := currencyTotals[currency]
-		message += fmt.Sprintf("  %s: %.2f %s", currency, amount, currency.Symbol())
+		message += fmt.Sprintf("  %s: %s %s", currency, formatNumber(amount), currency.Symbol())
 
 		if currency != domain.RUB {
 			rubEquivalent := amount * exchangeRates[currency]
-			message += fmt.Sprintf(" (%.2f ₽)", rubEquivalent)
+			message += fmt.Sprintf(" (%s ₽)", formatNumber(rubEquivalent))
 		}
 		message += "\n"
 	}
 
-	message += fmt.Sprintf("  Всего: %.2f ₽\n\n", totalRUB)
+	message += fmt.Sprintf("  Всего: %s ₽\n\n", formatNumber(totalRUB))
 	return message
+}
+
+func formatNumber(num float64) string {
+	str := fmt.Sprintf("%.2f", num)
+	parts := strings.Split(str, ".")
+	intPart := parts[0]
+	decPart := parts[1]
+
+	if len(intPart) > 3 {
+		var result strings.Builder
+		for i, digit := range intPart {
+			if i > 0 && (len(intPart)-i)%3 == 0 {
+				result.WriteString(",")
+			}
+			result.WriteRune(digit)
+		}
+		intPart = result.String()
+	}
+
+	return intPart + "." + decPart
 }

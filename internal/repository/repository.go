@@ -2,8 +2,8 @@ package repository
 
 import (
 	"context"
-	"time"
 	"github.com/aniats/FiatFormaggio/internal/domain"
+	"time"
 )
 
 type UserRepository interface {

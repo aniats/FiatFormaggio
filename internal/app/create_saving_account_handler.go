@@ -153,7 +153,7 @@ func (h *SavingAccountCreationHandler) sendInterestRatePrompt(bot *Bot, session 
 	amount := session.GetData("amount").(float64)
 
 	text := fmt.Sprintf(`✅ Валюта: %s (%s)
-✅ Сумма: %s
+	✅ Сумма: %s
 
 	Шаг 4/6: Введите процентную ставку (необязательно)
 	Например: 5.5, 7.2, 4
@@ -390,7 +390,6 @@ func (h *SavingAccountCreationHandler) CompleteSession(ctx context.Context, bot 
 	return nil
 }
 
-// Implement remaining SessionHandler interface methods (required by interface)
 func (h *SavingAccountCreationHandler) GetNextStep(currentStep SessionStep, input string) (SessionStep, error) {
 	return StepComplete, nil
 }

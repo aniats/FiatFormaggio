@@ -213,7 +213,6 @@ func (h *CashHoldingCreationHandler) CompleteSession(ctx context.Context, bot *B
 	return nil
 }
 
-// Implement remaining SessionHandler interface methods (required by interface)
 func (h *CashHoldingCreationHandler) GetNextStep(currentStep SessionStep, input string) (SessionStep, error) {
 	return StepComplete, nil
 }

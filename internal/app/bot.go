@@ -316,7 +316,6 @@ func (wp *WorkerPool) worker(ctx context.Context, workerID int64) {
 				return
 			}
 
-			// Process the job
 			job.bot.handleMessage(job.ctx, job.message)
 		}
 	}

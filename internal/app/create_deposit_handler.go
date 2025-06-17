@@ -131,7 +131,6 @@ func (h *DepositCreationHandler) handleCurrency(bot *Bot, session *UserSession, 
 		return nil
 	}
 
-	// Validate currency for deposits
 	if !h.isCurrencyAllowed(currency) {
 		text := fmt.Sprintf(`❌ Валюта "%s" (%s) не поддерживается для депозитов
 
@@ -262,7 +261,6 @@ func (h *DepositCreationHandler) handleConfirmation(ctx context.Context, bot *Bo
 }
 
 func (h *DepositCreationHandler) GetNextStep(currentStep SessionStep, input string) (SessionStep, error) {
-	// Implementation not needed for this approach, but required by interface
 	return currentStep, nil
 }
 

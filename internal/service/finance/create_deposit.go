@@ -20,12 +20,12 @@ const (
 	StepConfirmation
 )
 
-func (fs *FinanceService) CreateDeposit(ctx context.Context, req *models.CreateDepositRequest) (*domain.Deposit, error) {
-	if err := fs.validateCreateDepositRequest(req); err != nil {
+func (s *FinanceService) CreateDeposit(ctx context.Context, req *models.CreateDepositRequest) (*domain.Deposit, error) {
+	if err := s.validateCreateDepositRequest(req); err != nil {
 		return nil, fmt.Errorf("validation failed: %w", err)
 	}
 
-	currency, err := fs.validateAndNormalizeCurrency(req.Currency)
+	currency, err := s.validateAndNormalizeCurrency(req.Currency)
 	if err != nil {
 		return nil, fmt.Errorf("currency validation failed: %w", err)
 	}
@@ -48,14 +48,14 @@ func (fs *FinanceService) CreateDeposit(ctx context.Context, req *models.CreateD
 		Currency:                currency,
 	}
 
-	if err := fs.repo.CreateDeposit(ctx, deposit); err != nil {
+	if err := s.repo.CreateDeposit(ctx, deposit); err != nil {
 		return nil, fmt.Errorf("failed to create deposit in repository: %w", err)
 	}
 
 	return deposit, nil
 }
 
-func (fs *FinanceService) validateAndNormalizeCurrency(currencyInput string) (domain.CurrencyName, error) {
+func (s *FinanceService) validateAndNormalizeCurrency(currencyInput string) (domain.CurrencyName, error) {
 	if currencyInput == "" {
 		return domain.RUB, nil
 	}
@@ -64,10 +64,10 @@ func (fs *FinanceService) validateAndNormalizeCurrency(currencyInput string) (do
 	if err != nil {
 		return "", fmt.Errorf("неподдерживаемая валюта '%s'. Поддерживаемые валюты: %s",
 			currencyInput,
-			fs.getSupportedCurrenciesString())
+			s.getSupportedCurrenciesString())
 	}
 
-	if !fs.isCurrencyAllowedForDeposits(currency) {
+	if !s.isCurrencyAllowedForDeposits(currency) {
 		return "", fmt.Errorf("валюта '%s' (%s) не поддерживается для депозитов",
 			currency,
 			currency.ToHumanRussian())
@@ -76,7 +76,7 @@ func (fs *FinanceService) validateAndNormalizeCurrency(currencyInput string) (do
 	return currency, nil
 }
 
-func (fs *FinanceService) isCurrencyAllowedForDeposits(currency domain.CurrencyName) bool {
+func (s *FinanceService) isCurrencyAllowedForDeposits(currency domain.CurrencyName) bool {
 	allowedCurrencies := map[domain.CurrencyName]bool{
 		domain.RUB: true,
 		domain.USD: true,
@@ -90,7 +90,7 @@ func (fs *FinanceService) isCurrencyAllowedForDeposits(currency domain.CurrencyN
 	return allowedCurrencies[currency]
 }
 
-func (fs *FinanceService) getSupportedCurrenciesString() string {
+func (s *FinanceService) getSupportedCurrenciesString() string {
 	allowedCurrencies := []domain.CurrencyName{
 		domain.RUB, domain.USD, domain.EUR, domain.CNY, domain.GBP,
 	}
@@ -105,7 +105,7 @@ func (fs *FinanceService) getSupportedCurrenciesString() string {
 	return strings.Join(currencies, ", ")
 }
 
-func (fs *FinanceService) validateCreateDepositRequest(req *models.CreateDepositRequest) error {
+func (s *FinanceService) validateCreateDepositRequest(req *models.CreateDepositRequest) error {
 	if req == nil {
 		return fmt.Errorf("request cannot be nil")
 	}

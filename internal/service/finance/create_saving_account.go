@@ -14,16 +14,13 @@ func (s *FinanceService) CreateSavingAccount(ctx context.Context, req *models.Cr
 		return nil, fmt.Errorf("validation failed: %w", err)
 	}
 
-	// Parse and validate currency
 	currency, err := s.validateAndNormalizeCurrency(req.Currency)
 	if err != nil {
 		return nil, fmt.Errorf("invalid currency: %w", err)
 	}
 
-	// Convert amount to minor units
 	amountMinorUnits := int64(req.AmountRUB * 100)
 
-	// Convert interest rate to basis points
 	var interestRateBasisPoints int64
 	if req.InterestRatePercent != nil {
 		interestRateBasisPoints = int64(*req.InterestRatePercent * 100)

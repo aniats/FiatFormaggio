@@ -6,7 +6,6 @@ import (
 	"github.com/aniats/FiatFormaggio/internal/repository"
 )
 
-// CurrencyService interface for getting currency rates
 type CurrencyService interface {
 	GetCurrencyRates(ctx context.Context) ([]domain.CurrencyRate, error)
 }

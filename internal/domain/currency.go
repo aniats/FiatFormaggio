@@ -181,34 +181,6 @@ func CurrencyFromHuman(human string) (CurrencyName, error) {
 	return "", fmt.Errorf("unknown currency: %s", human)
 }
 
-func ParseCurrency(input string) (CurrencyName, error) {
-	return CurrencyFromHuman(input)
-}
-
-func AllCurrencies() []CurrencyName {
-	currencies := make([]CurrencyName, 0, len(currencyToHumanMap))
-	for currency := range currencyToHumanMap {
-		currencies = append(currencies, currency)
-	}
-	return currencies
-}
-
-func AllCurrencyNames() []string {
-	names := make([]string, 0, len(currencyToHumanMap))
-	for _, name := range currencyToHumanMap {
-		names = append(names, name)
-	}
-	return names
-}
-
-func AllCurrencyNamesRussian() []string {
-	names := make([]string, 0, len(currencyToHumanRussianMap))
-	for _, name := range currencyToHumanRussianMap {
-		names = append(names, name)
-	}
-	return names
-}
-
 func (c CurrencyName) FormatAmount(amount float64) string {
 	return fmt.Sprintf("%.2f %s (%s)", amount, c.Symbol(), c.ToHuman())
 }

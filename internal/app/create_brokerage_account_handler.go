@@ -152,7 +152,7 @@ func (h *BrokerageAccountCreationHandler) sendBrokerPrompt(bot *Bot, session *Us
 	amount := session.GetData("amount").(float64)
 
 	text := fmt.Sprintf(`✅ Валюта: %s (%s)
-✅ Сумма: %s
+	✅ Сумма: %s
 
 	Шаг 4/6: Введите название брокера (необязательно)
 	Например: "Тинькофф", "Сбербанк", "ВТБ", "Альфа-Банк"
@@ -361,7 +361,6 @@ func (h *BrokerageAccountCreationHandler) CompleteSession(ctx context.Context, b
 	return nil
 }
 
-// Implement remaining SessionHandler interface methods (required by interface)
 func (h *BrokerageAccountCreationHandler) GetNextStep(currentStep SessionStep, input string) (SessionStep, error) {
 	return StepComplete, nil
 }

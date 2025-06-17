@@ -26,7 +26,6 @@ const (
 	StepInterestRate SessionStep = "interest_rate"
 	StepDate         SessionStep = "date"
 	StepCategory     SessionStep = "category"
-	StepDescription  SessionStep = "description"
 	StepAccount      SessionStep = "account"
 	StepConfirmation SessionStep = "confirmation"
 	StepComplete     SessionStep = "complete"
@@ -63,14 +62,10 @@ func NewUserSessionManager() *UserSessionManager {
 		handlers: make(map[SessionType]SessionHandler),
 	}
 
-	// Register session handlers
 	manager.RegisterHandler(&DepositCreationHandler{})
 	manager.RegisterHandler(&BrokerageAccountCreationHandler{})
 	manager.RegisterHandler(&SavingAccountCreationHandler{})
 	manager.RegisterHandler(&CashHoldingCreationHandler{})
-	// Add more handlers as needed:
-	// manager.RegisterHandler(&ExpenseCreationHandler{})
-	// manager.RegisterHandler(&TransferHandler{})
 
 	return manager
 }
