@@ -1,4 +1,4 @@
-package repository
+package postgres
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"github.com/aniats/FiatFormaggio/internal/domain"
 )
 
-func (repo *PostgresRepository) CreateDeposit(ctx context.Context, deposit *domain.Deposit) error {
+func (repo *Repository) CreateDeposit(ctx context.Context, deposit *domain.Deposit) error {
 	query := `
         INSERT INTO deposits (
             user_id, 

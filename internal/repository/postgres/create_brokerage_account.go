@@ -1,4 +1,4 @@
-package repository
+package postgres
 
 import (
 	"context"
@@ -6,8 +6,7 @@ import (
 	"github.com/aniats/FiatFormaggio/internal/domain"
 )
 
-// CreateBrokerageAccount - creates a new brokerage account for a user
-func (repo *PostgresRepository) CreateBrokerageAccount(ctx context.Context, account *domain.BrokerageAccount) error {
+func (repo *Repository) CreateBrokerageAccount(ctx context.Context, account *domain.BrokerageAccount) error {
 	query := `
         INSERT INTO brokerage_accounts (
             user_id, 

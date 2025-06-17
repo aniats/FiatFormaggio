@@ -1,4 +1,4 @@
-package repository
+package postgres
 
 import (
 	"context"
@@ -6,8 +6,7 @@ import (
 	"github.com/aniats/FiatFormaggio/internal/domain"
 )
 
-// GetCashHoldingsByUserID - retrieves all cash holdings for a specific user
-func (repo *PostgresRepository) GetCashHoldingsByUserID(ctx context.Context, userId domain.UserId) ([]domain.CashHolding, error) {
+func (repo *Repository) GetCashHoldingsByUserID(ctx context.Context, userId domain.UserId) ([]domain.CashHolding, error) {
 	query := `
         SELECT 
             id, 

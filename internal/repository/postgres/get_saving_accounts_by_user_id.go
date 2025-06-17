@@ -1,4 +1,4 @@
-package repository
+package postgres
 
 import (
 	"context"
@@ -7,8 +7,7 @@ import (
 	"github.com/aniats/FiatFormaggio/internal/domain"
 )
 
-// GetSavingAccountsByUserID - retrieves all saving accounts for a specific user
-func (repo *PostgresRepository) GetSavingAccountsByUserID(ctx context.Context, userId domain.UserId) ([]domain.SavingAccount, error) {
+func (repo *Repository) GetSavingAccountsByUserID(ctx context.Context, userId domain.UserId) ([]domain.SavingAccount, error) {
 	query := `
         SELECT 
             id, 

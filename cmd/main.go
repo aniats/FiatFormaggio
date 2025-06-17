@@ -17,6 +17,7 @@ import (
 	"github.com/aniats/FiatFormaggio/internal/app"
 	"github.com/aniats/FiatFormaggio/internal/domain"
 	"github.com/aniats/FiatFormaggio/internal/repository"
+	"github.com/aniats/FiatFormaggio/internal/repository/postgres"
 )
 
 func main() {
@@ -58,7 +59,7 @@ func initRepository() (repository.Repository, error) {
 		return nil, fmt.Errorf("DATABASE_URL environment variable is required")
 	}
 
-	repo, err := repository.NewPostgresRepository(dbURL)
+	repo, err := postgres.New(dbURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create repository: %w", err)
 	}

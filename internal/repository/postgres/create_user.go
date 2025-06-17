@@ -1,4 +1,4 @@
-package repository
+package postgres
 
 import (
 	"context"
@@ -6,8 +6,7 @@ import (
 	"github.com/aniats/FiatFormaggio/internal/domain"
 )
 
-// CreateUser - creates a new user
-func (repo *PostgresRepository) CreateUser(ctx context.Context, user *domain.User) error {
+func (repo *Repository) CreateUser(ctx context.Context, user *domain.User) error {
 	query := `
         INSERT INTO users (
             id, 

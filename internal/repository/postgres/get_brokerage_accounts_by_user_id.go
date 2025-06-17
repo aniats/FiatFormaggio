@@ -1,4 +1,4 @@
-package repository
+package postgres
 
 import (
 	"context"
@@ -7,8 +7,7 @@ import (
 	"github.com/aniats/FiatFormaggio/internal/domain"
 )
 
-// GetBrokerageAccountsByUserID - retrieves all brokerage accounts for a specific user
-func (repo *PostgresRepository) GetBrokerageAccountsByUserID(ctx context.Context, userId domain.UserId) ([]domain.BrokerageAccount, error) {
+func (repo *Repository) GetBrokerageAccountsByUserID(ctx context.Context, userId domain.UserId) ([]domain.BrokerageAccount, error) {
 	query := `
         SELECT 
             id, 

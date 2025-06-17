@@ -1,4 +1,4 @@
-package repository
+package postgres
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"github.com/aniats/FiatFormaggio/internal/domain"
 )
 
-func (repo *PostgresRepository) EnsureUserExists(ctx context.Context, userID domain.UserId, username string) (bool, error) {
+func (repo *Repository) EnsureUserExists(ctx context.Context, userID domain.UserId, username string) (bool, error) {
 	var exists bool
 	checkQuery := `SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)`
 	err := repo.db.QueryRowContext(ctx, checkQuery, userID).Scan(&exists)

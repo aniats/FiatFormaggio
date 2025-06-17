@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	// UpdateOffsetFromBeginning Update offset constants
+	// UpdateOffset Update offset constants
 	UpdateOffsetFromBeginning = 0  // Get all pending updates from start
 	UpdateOffsetOnlyNew       = -1 // Skip pending, get only new updates
 	UpdateOffsetResume        = 1  // Base for resuming from specific point

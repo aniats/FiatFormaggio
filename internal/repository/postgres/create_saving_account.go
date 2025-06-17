@@ -1,4 +1,4 @@
-package repository
+package postgres
 
 import (
 	"context"
@@ -6,8 +6,7 @@ import (
 	"github.com/aniats/FiatFormaggio/internal/domain"
 )
 
-// CreateSavingAccount - creates a new saving account for a user
-func (repo *PostgresRepository) CreateSavingAccount(ctx context.Context, account *domain.SavingAccount) error {
+func (repo *Repository) CreateSavingAccount(ctx context.Context, account *domain.SavingAccount) error {
 	query := `
         INSERT INTO saving_accounts (
             user_id, 

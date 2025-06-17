@@ -1,4 +1,4 @@
-package repository
+package postgres
 
 import (
 	"context"
@@ -7,8 +7,7 @@ import (
 	"github.com/aniats/FiatFormaggio/internal/domain"
 )
 
-// GetDepositsByUserID - retrieves all deposits for a specific user
-func (repo *PostgresRepository) GetDepositsByUserID(ctx context.Context, userId domain.UserId) ([]domain.Deposit, error) {
+func (repo *Repository) GetDepositsByUserID(ctx context.Context, userId domain.UserId) ([]domain.Deposit, error) {
 	query := `
         SELECT
             id,

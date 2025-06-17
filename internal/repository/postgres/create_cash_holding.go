@@ -1,4 +1,4 @@
-package repository
+package postgres
 
 import (
 	"context"
@@ -6,8 +6,7 @@ import (
 	"github.com/aniats/FiatFormaggio/internal/domain"
 )
 
-// CreateCashHolding - creates a new cash holding for a user
-func (repo *PostgresRepository) CreateCashHolding(ctx context.Context, cash *domain.CashHolding) error {
+func (repo *Repository) CreateCashHolding(ctx context.Context, cash *domain.CashHolding) error {
 	query := `
         INSERT INTO cash_holdings (
             user_id, 
