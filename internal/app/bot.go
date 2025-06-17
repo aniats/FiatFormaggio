@@ -24,6 +24,36 @@ const (
 	WorkerChannelBufferSize = 100
 )
 
+type CommandType string
+
+const (
+	CommandStart                  CommandType = "start"
+	CommandHelp                   CommandType = "help"
+	CommandDeposits               CommandType = "deposits"
+	CommandDepositsRu1            CommandType = "депозиты"
+	CommandDepositsRu2            CommandType = "вклады"
+	CommandCreateDeposit          CommandType = "create_deposit"
+	CommandCreateDepositRu        CommandType = "добавить_депозит"
+	CommandBrokerageAccounts      CommandType = "brokerage_accounts"
+	CommandBrokerageAccountsRu1   CommandType = "брокерские_счета"
+	CommandBrokerageAccountsRu2   CommandType = "счета"
+	CommandCreateBrokerageAccount CommandType = "create_brokerage_account"
+	CommandCreateBrokerageAccountRu CommandType = "создать_брокерский_счет"
+	CommandSavingAccounts         CommandType = "saving_accounts"
+	CommandSavingAccountsRu1      CommandType = "накопительные_счета"
+	CommandSavingAccountsRu2      CommandType = "накопления"
+	CommandCreateSavingAccount    CommandType = "create_saving_account"
+	CommandCreateSavingAccountRu  CommandType = "создать_накопительный_счет"
+	CommandCashHoldings           CommandType = "cash_holdings"
+	CommandCashHoldingsRu1        CommandType = "наличные"
+	CommandCashHoldingsRu2        CommandType = "наличные_счета"
+	CommandCreateCashHolding      CommandType = "create_cash_holding"
+	CommandCreateCashHoldingRu    CommandType = "создать_наличный_счет"
+	CommandRates                  CommandType = "rates"
+	CommandRatesRu1               CommandType = "курсы"
+	CommandRatesRu2               CommandType = "валюты"
+)
+
 type BotAPI interface {
 	GetLastEvents() <-chan tgBotAPI.Update
 	SendMessage(chatID int64, text string) error
@@ -163,7 +193,7 @@ func (b *Bot) handleMessage(ctx context.Context, message *Message) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	command := strings.ToLower(message.Command())
+	command := CommandType(strings.ToLower(message.Command()))
 	chatID := message.ChatID
 	userID := domain.UserId(message.UserID)
 
@@ -186,25 +216,25 @@ func (b *Bot) handleMessage(ctx context.Context, message *Message) {
 	}
 
 	switch command {
-	case "start", "help":
+	case CommandStart, CommandHelp:
 		b.handleHelp(chatID)
-	case "deposits", "депозиты", "вклады":
+	case CommandDeposits, CommandDepositsRu1, CommandDepositsRu2:
 		b.handleDepositsCommand(ctx, chatID, domain.UserId(message.UserID))
-	case "create_deposit", "добавить_депозит":
+	case CommandCreateDeposit, CommandCreateDepositRu:
 		b.startSession(ctx, message, SessionCreateDeposit)
-	case "brokerage_accounts", "брокерские_счета", "счета":
+	case CommandBrokerageAccounts, CommandBrokerageAccountsRu1, CommandBrokerageAccountsRu2:
 		b.handleBrokerageAccountsCommand(ctx, chatID, domain.UserId(message.UserID))
-	case "create_brokerage_account", "создать_брокерский_счет":
+	case CommandCreateBrokerageAccount, CommandCreateBrokerageAccountRu:
 		b.startSession(ctx, message, SessionCreateBrokerageAccountSession)
-	case "saving_accounts", "накопительные_счета", "накопления":
+	case CommandSavingAccounts, CommandSavingAccountsRu1, CommandSavingAccountsRu2:
 		b.handleSavingAccountsCommand(ctx, chatID, domain.UserId(message.UserID))
-	case "create_saving_account", "создать_накопительный_счет":
+	case CommandCreateSavingAccount, CommandCreateSavingAccountRu:
 		b.startSession(ctx, message, SessionCreateSavingAccount)
-	case "cash_holdings", "наличные", "наличные_счета":
+	case CommandCashHoldings, CommandCashHoldingsRu1, CommandCashHoldingsRu2:
 		b.handleCashHoldingsCommand(ctx, chatID, domain.UserId(message.UserID))
-	case "create_cash_holding", "создать_наличный_счет":
+	case CommandCreateCashHolding, CommandCreateCashHoldingRu:
 		b.startSession(ctx, message, SessionCreateCashHolding)
-	case "rates", "курсы", "валюты":
+	case CommandRates, CommandRatesRu1, CommandRatesRu2:
 		b.handleCurrencyRatesCommand(ctx, chatID)
 	default:
 		b.sendMessage(chatID, "Неизвестная команда. Введите /help для списка команд.")
