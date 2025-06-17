@@ -9,7 +9,7 @@ import (
 
 const defaultMinorUnits = 100.0
 
-func (b *Bot) handleDepositsCommand(ctx context.Context, chatID int64, userID domain.UserId) {
+func (b *Bot) sendDepositsCommand(ctx context.Context, chatID int64, userID domain.UserId) {
 	deposits, err := b.financeService.GetDepositsByUserID(ctx, userID)
 	if err != nil {
 		log.Printf("Ошибка при получении депозитов для пользователя %d: %v", userID, err)

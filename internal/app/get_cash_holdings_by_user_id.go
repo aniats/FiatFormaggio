@@ -7,7 +7,7 @@ import (
 	"log"
 )
 
-func (b *Bot) handleCashHoldingsCommand(ctx context.Context, chatID int64, userID domain.UserId) {
+func (b *Bot) sendCashHoldingsCommand(ctx context.Context, chatID int64, userID domain.UserId) {
 	holdings, err := b.financeService.GetCashHoldingsByUserID(ctx, userID)
 	if err != nil {
 		log.Printf("Ошибка при получении наличных счетов для пользователя %d: %v", userID, err)

@@ -217,31 +217,31 @@ func (b *Bot) handleMessage(ctx context.Context, message *Message) {
 
 	switch command {
 	case CommandStart, CommandHelp:
-		b.handleHelp(chatID)
+		b.sendHelp(chatID)
 	case CommandDeposits, CommandDepositsRu1, CommandDepositsRu2:
-		b.handleDepositsCommand(ctx, chatID, domain.UserId(message.UserID))
+		b.sendDepositsCommand(ctx, chatID, domain.UserId(message.UserID))
 	case CommandCreateDeposit, CommandCreateDepositRu:
 		b.startSession(ctx, message, SessionCreateDeposit)
 	case CommandBrokerageAccounts, CommandBrokerageAccountsRu1, CommandBrokerageAccountsRu2:
-		b.handleBrokerageAccountsCommand(ctx, chatID, domain.UserId(message.UserID))
+		b.sendBrokerageAccountsCommand(ctx, chatID, domain.UserId(message.UserID))
 	case CommandCreateBrokerageAccount, CommandCreateBrokerageAccountRu:
 		b.startSession(ctx, message, SessionCreateBrokerageAccountSession)
 	case CommandSavingAccounts, CommandSavingAccountsRu1, CommandSavingAccountsRu2:
-		b.handleSavingAccountsCommand(ctx, chatID, domain.UserId(message.UserID))
+		b.sendSavingAccountsCommand(ctx, chatID, domain.UserId(message.UserID))
 	case CommandCreateSavingAccount, CommandCreateSavingAccountRu:
 		b.startSession(ctx, message, SessionCreateSavingAccount)
 	case CommandCashHoldings, CommandCashHoldingsRu1, CommandCashHoldingsRu2:
-		b.handleCashHoldingsCommand(ctx, chatID, domain.UserId(message.UserID))
+		b.sendCashHoldingsCommand(ctx, chatID, domain.UserId(message.UserID))
 	case CommandCreateCashHolding, CommandCreateCashHoldingRu:
 		b.startSession(ctx, message, SessionCreateCashHolding)
 	case CommandRates, CommandRatesRu1, CommandRatesRu2:
-		b.handleCurrencyRatesCommand(ctx, chatID)
+		b.sendCurrencyRatesCommand(ctx, chatID)
 	default:
 		b.sendMessage(chatID, "Неизвестная команда. Введите /help для списка команд.")
 	}
 }
 
-func (b *Bot) handleHelp(chatID int64) {
+func (b *Bot) sendHelp(chatID int64) {
 	helpText := `Доступные команды:
 		/total - Общий баланс
 		/deposits - Показать депозиты

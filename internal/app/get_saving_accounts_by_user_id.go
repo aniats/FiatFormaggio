@@ -7,7 +7,7 @@ import (
 	"log"
 )
 
-func (b *Bot) handleSavingAccountsCommand(ctx context.Context, chatID int64, userID domain.UserId) {
+func (b *Bot) sendSavingAccountsCommand(ctx context.Context, chatID int64, userID domain.UserId) {
 	accounts, err := b.financeService.GetSavingAccountsByUserID(ctx, userID)
 	if err != nil {
 		log.Printf("Ошибка при получении накопительных счетов для пользователя %d: %v", userID, err)

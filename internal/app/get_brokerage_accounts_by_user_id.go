@@ -8,7 +8,7 @@ import (
 )
 
 
-func (b *Bot) handleBrokerageAccountsCommand(ctx context.Context, chatID int64, userID domain.UserId) {
+func (b *Bot) sendBrokerageAccountsCommand(ctx context.Context, chatID int64, userID domain.UserId) {
 	accounts, err := b.financeService.GetBrokerageAccountsByUserID(ctx, userID)
 	if err != nil {
 		log.Printf("Ошибка при получении брокерских счетов для пользователя %d: %v", userID, err)

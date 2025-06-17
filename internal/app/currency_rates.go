@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func (b *Bot) handleCurrencyRatesCommand(ctx context.Context, chatID int64) {
+func (b *Bot) sendCurrencyRatesCommand(ctx context.Context, chatID int64) {
 	rates, err := b.cbrService.GetCurrencyRates(ctx, time.Now())
 	if err != nil {
 		b.sendMessage(chatID, "❌ Ошибка получения курсов валют. Попробуйте позже.")
