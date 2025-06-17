@@ -2,7 +2,7 @@ package app
 
 func (b *Bot) sendHelp(chatID int64) {
 	helpText := `Доступные команды:
-		/total - Общий баланс
+		/total - Общий баланс по всем счетам в рублях с курсами валют
 		/deposits - Показать депозиты
 		/create_deposit - Создать депозит
 		/brokerage_accounts - Показать брокерские счета

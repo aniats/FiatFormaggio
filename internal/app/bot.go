@@ -29,6 +29,8 @@ type CommandType string
 const (
 	CommandStart                    CommandType = "start"
 	CommandHelp                     CommandType = "help"
+	CommandTotal                    CommandType = "total"
+	CommandTotalRu                  CommandType = "общий_баланс"
 	CommandDeposits                 CommandType = "deposits"
 	CommandDepositsRu1              CommandType = "депозиты"
 	CommandDepositsRu2              CommandType = "вклады"
@@ -218,6 +220,8 @@ func (b *Bot) handleMessage(ctx context.Context, message *Message) {
 	switch command {
 	case CommandStart, CommandHelp:
 		b.sendHelp(chatID)
+	case CommandTotal, CommandTotalRu:
+		b.sendTotalBalanceCommand(ctx, chatID, domain.UserId(message.UserID))
 	case CommandDeposits, CommandDepositsRu1, CommandDepositsRu2:
 		b.sendDepositsCommand(ctx, chatID, domain.UserId(message.UserID))
 	case CommandCreateDeposit, CommandCreateDepositRu:
