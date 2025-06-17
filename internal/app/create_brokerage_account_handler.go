@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/aniats/FiatFormaggio/internal/domain"
 	"github.com/aniats/FiatFormaggio/internal/service/finance/models"
-	tgBotAPI "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"strconv"
 	"strings"
 )
@@ -16,7 +15,7 @@ func (h *BrokerageAccountCreationHandler) GetSessionType() SessionType {
 	return SessionCreateBrokerageAccountSession
 }
 
-func (h *BrokerageAccountCreationHandler) HandleStep(ctx context.Context, bot *Bot, session *UserSession, msg *tgBotAPI.Message) error {
+func (h *BrokerageAccountCreationHandler) HandleStep(ctx context.Context, bot *Bot, session *UserSession, msg *Message) error {
 	switch session.CurrentStep {
 	case StepStart:
 		return h.handleStart(bot, session)
@@ -52,7 +51,7 @@ func (h *BrokerageAccountCreationHandler) handleStart(bot *Bot, session *UserSes
 
 func (h *BrokerageAccountCreationHandler) handleName(bot *Bot, session *UserSession, input string) error {
 	name := strings.TrimSpace(input)
-	
+
 	if name == "" {
 		bot.sendMessage(session.ChatID, "❌ Название не может быть пустым. Попробуйте еще раз:")
 		return nil
@@ -79,7 +78,7 @@ func (h *BrokerageAccountCreationHandler) handleName(bot *Bot, session *UserSess
 
 func (h *BrokerageAccountCreationHandler) handleAmount(bot *Bot, session *UserSession, input string) error {
 	amountStr := strings.TrimSpace(strings.Replace(input, ",", ".", -1))
-	
+
 	amount, err := strconv.ParseFloat(amountStr, 64)
 	if err != nil {
 		bot.sendMessage(session.ChatID, "❌ Неверный формат суммы. Введите число (например: 50000, 1500.50, 0):")
@@ -151,15 +150,15 @@ func (h *BrokerageAccountCreationHandler) handleCurrency(bot *Bot, session *User
 func (h *BrokerageAccountCreationHandler) sendBrokerPrompt(bot *Bot, session *UserSession) {
 	currency := session.GetData("currency").(domain.CurrencyName)
 	amount := session.GetData("amount").(float64)
-	
+
 	text := fmt.Sprintf(`✅ Валюта: %s (%s)
 ✅ Сумма: %s
 
 	Шаг 4/6: Введите название брокера (необязательно)
 	Например: "Тинькофф", "Сбербанк", "ВТБ", "Альфа-Банк"
 	
-	Введите "пропустить" если не хотите указывать брокера`, 
-		currency.ToHumanRussian(), 
+	Введите "пропустить" если не хотите указывать брокера`,
+		currency.ToHumanRussian(),
 		currency.Symbol(),
 		currency.FormatAmountRussian(amount))
 
@@ -168,7 +167,7 @@ func (h *BrokerageAccountCreationHandler) sendBrokerPrompt(bot *Bot, session *Us
 
 func (h *BrokerageAccountCreationHandler) handleBroker(bot *Bot, session *UserSession, input string) error {
 	brokerInput := strings.TrimSpace(input)
-	
+
 	var broker *string
 	if strings.ToLower(brokerInput) == "пропустить" || brokerInput == "" {
 		broker = nil
@@ -232,7 +231,7 @@ func (h *BrokerageAccountCreationHandler) handleAccountType(bot *Bot, session *U
 
 func (h *BrokerageAccountCreationHandler) parseAccountType(input string) (domain.BrokerageType, error) {
 	input = strings.ToLower(strings.TrimSpace(input))
-	
+
 	switch input {
 	case "regular", "обычный":
 		return domain.Regular, nil
@@ -301,7 +300,7 @@ func (h *BrokerageAccountCreationHandler) formatAccountType(accountType domain.B
 
 func (h *BrokerageAccountCreationHandler) handleConfirmation(ctx context.Context, bot *Bot, session *UserSession, input string) error {
 	response := strings.ToLower(strings.TrimSpace(input))
-	
+
 	if response == "нет" || response == "отмена" {
 		bot.sessionManager.ClearSession(session.UserID)
 		bot.sendMessage(session.ChatID, "❌ Создание брокерского счета отменено.")

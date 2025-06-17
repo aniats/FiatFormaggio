@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/aniats/FiatFormaggio/internal/domain"
 	"github.com/aniats/FiatFormaggio/internal/service/finance/models"
-	tgBotAPI "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"strconv"
 	"strings"
 	"time"
@@ -17,7 +16,7 @@ func (h *SavingAccountCreationHandler) GetSessionType() SessionType {
 	return SessionCreateSavingAccount
 }
 
-func (h *SavingAccountCreationHandler) HandleStep(ctx context.Context, bot *Bot, session *UserSession, msg *tgBotAPI.Message) error {
+func (h *SavingAccountCreationHandler) HandleStep(ctx context.Context, bot *Bot, session *UserSession, msg *Message) error {
 	switch session.CurrentStep {
 	case StepStart:
 		return h.handleStart(bot, session)
@@ -53,7 +52,7 @@ func (h *SavingAccountCreationHandler) handleStart(bot *Bot, session *UserSessio
 
 func (h *SavingAccountCreationHandler) handleName(bot *Bot, session *UserSession, input string) error {
 	name := strings.TrimSpace(input)
-	
+
 	if name == "" {
 		bot.sendMessage(session.ChatID, "❌ Название не может быть пустым. Попробуйте еще раз:")
 		return nil
@@ -80,7 +79,7 @@ func (h *SavingAccountCreationHandler) handleName(bot *Bot, session *UserSession
 
 func (h *SavingAccountCreationHandler) handleAmount(bot *Bot, session *UserSession, input string) error {
 	amountStr := strings.TrimSpace(strings.Replace(input, ",", ".", -1))
-	
+
 	amount, err := strconv.ParseFloat(amountStr, 64)
 	if err != nil {
 		bot.sendMessage(session.ChatID, "❌ Неверный формат суммы. Введите число (например: 25000, 1000.50, 0):")
@@ -152,15 +151,15 @@ func (h *SavingAccountCreationHandler) handleCurrency(bot *Bot, session *UserSes
 func (h *SavingAccountCreationHandler) sendInterestRatePrompt(bot *Bot, session *UserSession) {
 	currency := session.GetData("currency").(domain.CurrencyName)
 	amount := session.GetData("amount").(float64)
-	
+
 	text := fmt.Sprintf(`✅ Валюта: %s (%s)
 ✅ Сумма: %s
 
 	Шаг 4/6: Введите процентную ставку (необязательно)
 	Например: 5.5, 7.2, 4
 	
-	Введите "пропустить" если не хотите указывать ставку`, 
-		currency.ToHumanRussian(), 
+	Введите "пропустить" если не хотите указывать ставку`,
+		currency.ToHumanRussian(),
 		currency.Symbol(),
 		currency.FormatAmountRussian(amount))
 
@@ -169,7 +168,7 @@ func (h *SavingAccountCreationHandler) sendInterestRatePrompt(bot *Bot, session 
 
 func (h *SavingAccountCreationHandler) handleInterestRate(bot *Bot, session *UserSession, input string) error {
 	rateStr := strings.TrimSpace(input)
-	
+
 	if strings.ToLower(rateStr) == "пропустить" || rateStr == "" {
 		session.SetData("interestRate", nil)
 		session.CurrentStep = StepDate
@@ -277,7 +276,7 @@ func (h *SavingAccountCreationHandler) sendConfirmation(bot *Bot, session *UserS
 	name := session.GetData("name").(string)
 	amount := session.GetData("amount").(float64)
 	currency := session.GetData("currency").(domain.CurrencyName)
-	
+
 	rateText := "Не указана"
 	rateData := session.GetData("interestRate")
 	if rateData != nil {
@@ -317,7 +316,7 @@ func (h *SavingAccountCreationHandler) sendConfirmation(bot *Bot, session *UserS
 
 func (h *SavingAccountCreationHandler) handleConfirmation(ctx context.Context, bot *Bot, session *UserSession, input string) error {
 	response := strings.ToLower(strings.TrimSpace(input))
-	
+
 	if response == "нет" || response == "отмена" {
 		bot.sessionManager.ClearSession(session.UserID)
 		bot.sendMessage(session.ChatID, "❌ Создание накопительного счета отменено.")
@@ -338,7 +337,7 @@ func (h *SavingAccountCreationHandler) CompleteSession(ctx context.Context, bot 
 	name := session.GetData("name").(string)
 	amount := session.GetData("amount").(float64)
 	currency := session.GetData("currency").(domain.CurrencyName)
-	
+
 	var interestRate *float64
 	if rateData := session.GetData("interestRate"); rateData != nil {
 		interestRate = rateData.(*float64)

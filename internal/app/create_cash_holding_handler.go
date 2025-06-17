@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/aniats/FiatFormaggio/internal/domain"
 	"github.com/aniats/FiatFormaggio/internal/service/finance/models"
-	tgBotAPI "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"strconv"
 	"strings"
 )
@@ -16,7 +15,7 @@ func (h *CashHoldingCreationHandler) GetSessionType() SessionType {
 	return SessionCreateCashHolding
 }
 
-func (h *CashHoldingCreationHandler) HandleStep(ctx context.Context, bot *Bot, session *UserSession, msg *tgBotAPI.Message) error {
+func (h *CashHoldingCreationHandler) HandleStep(ctx context.Context, bot *Bot, session *UserSession, msg *Message) error {
 	switch session.CurrentStep {
 	case StepStart:
 		return h.handleStart(bot, session)
@@ -48,7 +47,7 @@ func (h *CashHoldingCreationHandler) handleStart(bot *Bot, session *UserSession)
 
 func (h *CashHoldingCreationHandler) handleName(bot *Bot, session *UserSession, input string) error {
 	name := strings.TrimSpace(input)
-	
+
 	if name == "" {
 		bot.sendMessage(session.ChatID, "❌ Название не может быть пустым. Попробуйте еще раз:")
 		return nil
@@ -75,7 +74,7 @@ func (h *CashHoldingCreationHandler) handleName(bot *Bot, session *UserSession, 
 
 func (h *CashHoldingCreationHandler) handleAmount(bot *Bot, session *UserSession, input string) error {
 	amountStr := strings.TrimSpace(strings.Replace(input, ",", ".", -1))
-	
+
 	amount, err := strconv.ParseFloat(amountStr, 64)
 	if err != nil {
 		bot.sendMessage(session.ChatID, "❌ Неверный формат суммы. Введите число (например: 5000, 1500.50, 100):")
@@ -166,7 +165,7 @@ func (h *CashHoldingCreationHandler) sendConfirmation(bot *Bot, session *UserSes
 
 func (h *CashHoldingCreationHandler) handleConfirmation(ctx context.Context, bot *Bot, session *UserSession, input string) error {
 	response := strings.ToLower(strings.TrimSpace(input))
-	
+
 	if response == "нет" || response == "отмена" {
 		bot.sessionManager.ClearSession(session.UserID)
 		bot.sendMessage(session.ChatID, "❌ Создание наличного счета отменено.")

@@ -90,6 +90,17 @@ func (m *MockBotAPI) AddUpdate(update tgBotAPI.Update) {
 	m.updates <- update
 }
 
+func (m *MockBotAPI) AddTestMessage(chatID, userID int64, username, text string) {
+	update := tgBotAPI.Update{
+		Message: &tgBotAPI.Message{
+			Chat: &tgBotAPI.Chat{ID: chatID},
+			From: &tgBotAPI.User{ID: userID, UserName: username},
+			Text: text,
+		},
+	}
+	m.updates <- update
+}
+
 func (m *MockBotAPI) GetSentMessages() []MockMessage {
 	return m.sent
 }

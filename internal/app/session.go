@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/aniats/FiatFormaggio/internal/domain"
-	tgBotAPI "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"time"
 )
 
@@ -35,7 +34,7 @@ const (
 
 type SessionHandler interface {
 	GetSessionType() SessionType
-	HandleStep(ctx context.Context, bot *Bot, session *UserSession, msg *tgBotAPI.Message) error
+	HandleStep(ctx context.Context, bot *Bot, session *UserSession, msg *Message) error
 	GetNextStep(currentStep SessionStep, input string) (SessionStep, error)
 	ValidateInput(step SessionStep, input string) error
 	FormatConfirmation(session *UserSession) string

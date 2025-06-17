@@ -60,9 +60,30 @@ type WorkerPool struct {
 	wg         sync.WaitGroup
 }
 
+type Message struct {
+	ChatID   int64
+	UserID   int64
+	Username string
+	Text     string
+}
+
+func (m *Message) Command() string {
+	if len(m.Text) == 0 || m.Text[0] != '/' {
+		return ""
+	}
+	
+	parts := strings.Fields(m.Text)
+	if len(parts) == 0 {
+		return ""
+	}
+	
+	command := parts[0][1:] // Remove the '/' prefix
+	return command
+}
+
 type Job struct {
 	ctx     context.Context
-	message *tgBotAPI.Message
+	message *Message
 	bot     *Bot
 }
 
@@ -103,9 +124,16 @@ func (b *Bot) Start(ctx context.Context) error {
 				continue
 			}
 
+			msg := &Message{
+				ChatID:   update.Message.Chat.ID,
+				UserID:   update.Message.From.ID,
+				Username: update.Message.From.UserName,
+				Text:     update.Message.Text,
+			}
+
 			job := Job{
 				ctx:     ctx,
-				message: update.Message,
+				message: msg,
 				bot:     b,
 			}
 
@@ -131,15 +159,15 @@ func (b *Bot) sendMessage(chatID int64, text string) {
 	}
 }
 
-func (b *Bot) handleMessage(ctx context.Context, message *tgBotAPI.Message) {
+func (b *Bot) handleMessage(ctx context.Context, message *Message) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	command := strings.ToLower(message.Command())
-	chatID := message.Chat.ID
-	userID := domain.UserId(message.From.ID)
+	chatID := message.ChatID
+	userID := domain.UserId(message.UserID)
 
-	telegramUsername := message.From.UserName
+	telegramUsername := message.Username
 
 	isNewUser, err := b.financeService.EnsureUserExists(ctx, userID, telegramUsername)
 	if err != nil {
@@ -161,19 +189,19 @@ func (b *Bot) handleMessage(ctx context.Context, message *tgBotAPI.Message) {
 	case "start", "help":
 		b.handleHelp(chatID)
 	case "deposits", "депозиты", "вклады":
-		b.handleDepositsCommand(ctx, chatID, domain.UserId(message.From.ID))
+		b.handleDepositsCommand(ctx, chatID, domain.UserId(message.UserID))
 	case "create_deposit", "добавить_депозит":
 		b.startSession(ctx, message, SessionCreateDeposit)
 	case "brokerage_accounts", "брокерские_счета", "счета":
-		b.handleBrokerageAccountsCommand(ctx, chatID, domain.UserId(message.From.ID))
+		b.handleBrokerageAccountsCommand(ctx, chatID, domain.UserId(message.UserID))
 	case "create_brokerage_account", "создать_брокерский_счет":
 		b.startSession(ctx, message, SessionCreateBrokerageAccountSession)
 	case "saving_accounts", "накопительные_счета", "накопления":
-		b.handleSavingAccountsCommand(ctx, chatID, domain.UserId(message.From.ID))
+		b.handleSavingAccountsCommand(ctx, chatID, domain.UserId(message.UserID))
 	case "create_saving_account", "создать_накопительный_счет":
 		b.startSession(ctx, message, SessionCreateSavingAccount)
 	case "cash_holdings", "наличные", "наличные_счета":
-		b.handleCashHoldingsCommand(ctx, chatID, domain.UserId(message.From.ID))
+		b.handleCashHoldingsCommand(ctx, chatID, domain.UserId(message.UserID))
 	case "create_cash_holding", "создать_наличный_счет":
 		b.startSession(ctx, message, SessionCreateCashHolding)
 	case "rates", "курсы", "валюты":
@@ -200,9 +228,9 @@ func (b *Bot) handleHelp(chatID int64) {
 	b.sendMessage(chatID, helpText)
 }
 
-func (b *Bot) startSession(ctx context.Context, msg *tgBotAPI.Message, sessionType SessionType) {
-	userID := domain.UserId(msg.From.ID)
-	chatID := msg.Chat.ID
+func (b *Bot) startSession(ctx context.Context, msg *Message, sessionType SessionType) {
+	userID := domain.UserId(msg.UserID)
+	chatID := msg.ChatID
 
 	session, err := b.sessionManager.StartSession(userID, chatID, sessionType)
 	if err != nil {
@@ -216,7 +244,7 @@ func (b *Bot) startSession(ctx context.Context, msg *tgBotAPI.Message, sessionTy
 	}
 }
 
-func (b *Bot) handleSessionMessage(ctx context.Context, msg *tgBotAPI.Message, session *UserSession) {
+func (b *Bot) handleSessionMessage(ctx context.Context, msg *Message, session *UserSession) {
 	b.sessionManager.UpdateLastActivity(session.UserID)
 
 	if strings.ToLower(msg.Text) == "/cancel" || strings.ToLower(msg.Text) == "отмена" {
