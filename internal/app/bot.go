@@ -27,31 +27,31 @@ const (
 type CommandType string
 
 const (
-	CommandStart                  CommandType = "start"
-	CommandHelp                   CommandType = "help"
-	CommandDeposits               CommandType = "deposits"
-	CommandDepositsRu1            CommandType = "депозиты"
-	CommandDepositsRu2            CommandType = "вклады"
-	CommandCreateDeposit          CommandType = "create_deposit"
-	CommandCreateDepositRu        CommandType = "добавить_депозит"
-	CommandBrokerageAccounts      CommandType = "brokerage_accounts"
-	CommandBrokerageAccountsRu1   CommandType = "брокерские_счета"
-	CommandBrokerageAccountsRu2   CommandType = "счета"
-	CommandCreateBrokerageAccount CommandType = "create_brokerage_account"
+	CommandStart                    CommandType = "start"
+	CommandHelp                     CommandType = "help"
+	CommandDeposits                 CommandType = "deposits"
+	CommandDepositsRu1              CommandType = "депозиты"
+	CommandDepositsRu2              CommandType = "вклады"
+	CommandCreateDeposit            CommandType = "create_deposit"
+	CommandCreateDepositRu          CommandType = "добавить_депозит"
+	CommandBrokerageAccounts        CommandType = "brokerage_accounts"
+	CommandBrokerageAccountsRu1     CommandType = "брокерские_счета"
+	CommandBrokerageAccountsRu2     CommandType = "счета"
+	CommandCreateBrokerageAccount   CommandType = "create_brokerage_account"
 	CommandCreateBrokerageAccountRu CommandType = "создать_брокерский_счет"
-	CommandSavingAccounts         CommandType = "saving_accounts"
-	CommandSavingAccountsRu1      CommandType = "накопительные_счета"
-	CommandSavingAccountsRu2      CommandType = "накопления"
-	CommandCreateSavingAccount    CommandType = "create_saving_account"
-	CommandCreateSavingAccountRu  CommandType = "создать_накопительный_счет"
-	CommandCashHoldings           CommandType = "cash_holdings"
-	CommandCashHoldingsRu1        CommandType = "наличные"
-	CommandCashHoldingsRu2        CommandType = "наличные_счета"
-	CommandCreateCashHolding      CommandType = "create_cash_holding"
-	CommandCreateCashHoldingRu    CommandType = "создать_наличный_счет"
-	CommandRates                  CommandType = "rates"
-	CommandRatesRu1               CommandType = "курсы"
-	CommandRatesRu2               CommandType = "валюты"
+	CommandSavingAccounts           CommandType = "saving_accounts"
+	CommandSavingAccountsRu1        CommandType = "накопительные_счета"
+	CommandSavingAccountsRu2        CommandType = "накопления"
+	CommandCreateSavingAccount      CommandType = "create_saving_account"
+	CommandCreateSavingAccountRu    CommandType = "создать_накопительный_счет"
+	CommandCashHoldings             CommandType = "cash_holdings"
+	CommandCashHoldingsRu1          CommandType = "наличные"
+	CommandCashHoldingsRu2          CommandType = "наличные_счета"
+	CommandCreateCashHolding        CommandType = "create_cash_holding"
+	CommandCreateCashHoldingRu      CommandType = "создать_наличный_счет"
+	CommandRates                    CommandType = "rates"
+	CommandRatesRu1                 CommandType = "курсы"
+	CommandRatesRu2                 CommandType = "валюты"
 )
 
 type BotAPI interface {
@@ -85,7 +85,7 @@ type Bot struct {
 }
 
 type WorkerPool struct {
-	workers    int
+	workers    int64
 	jobChannel chan Job
 	wg         sync.WaitGroup
 }
@@ -101,12 +101,12 @@ func (m *Message) Command() string {
 	if len(m.Text) == 0 || m.Text[0] != '/' {
 		return ""
 	}
-	
+
 	parts := strings.Fields(m.Text)
 	if len(parts) == 0 {
 		return ""
 	}
-	
+
 	command := parts[0][1:] // Remove the '/' prefix
 	return command
 }
@@ -241,23 +241,6 @@ func (b *Bot) handleMessage(ctx context.Context, message *Message) {
 	}
 }
 
-func (b *Bot) sendHelp(chatID int64) {
-	helpText := `Доступные команды:
-		/total - Общий баланс
-		/deposits - Показать депозиты
-		/create_deposit - Создать депозит
-		/brokerage_accounts - Показать брокерские счета
-		/create_brokerage_account - Создать брокерский счет
-		/saving_accounts - Показать накопительные счета
-		/create_saving_account - Создать накопительный счет
-		/cash_holdings - Показать наличные счета
-		/create_cash_holding - Создать наличный счет
-		/rates - Курсы валют ЦБ РФ
-	`
-
-	b.sendMessage(chatID, helpText)
-}
-
 func (b *Bot) startSession(ctx context.Context, msg *Message, sessionType SessionType) {
 	userID := domain.UserId(msg.UserID)
 	chatID := msg.ChatID
@@ -292,7 +275,7 @@ func (b *Bot) cancelSession(userID domain.UserId, chatID int64) {
 	b.sendMessage(chatID, "❌ Операция отменена.")
 }
 
-func NewWorkerPool(workers int) *WorkerPool {
+func NewWorkerPool(workers int64) *WorkerPool {
 	return &WorkerPool{
 		workers:    workers,
 		jobChannel: make(chan Job, WorkerChannelBufferSize),
@@ -300,7 +283,7 @@ func NewWorkerPool(workers int) *WorkerPool {
 }
 
 func (wp *WorkerPool) Start(ctx context.Context) {
-	for i := 0; i < wp.workers; i++ {
+	for i := int64(0); i < wp.workers; i++ {
 		wp.wg.Add(1)
 		go wp.worker(ctx, i+1)
 	}
@@ -313,7 +296,7 @@ func (wp *WorkerPool) Stop() {
 	log.Println("All workers stopped")
 }
 
-func (wp *WorkerPool) worker(ctx context.Context, workerID int) {
+func (wp *WorkerPool) worker(ctx context.Context, workerID int64) {
 	defer wp.wg.Done()
 
 	log.Printf("Worker %d started", workerID)
