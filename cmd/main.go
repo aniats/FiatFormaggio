@@ -35,7 +35,7 @@ func main() {
 	}()
 
 	cbrService := initCBRService()
-	financeService := finance.NewFinanceService(repo, cbrService) // Now uses repository.Repository interface
+	financeService := finance.NewFinanceService(repo, cbrService)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

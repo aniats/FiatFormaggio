@@ -3,7 +3,7 @@ package app
 import (
 	"log"
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	tgBotAPI "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 const (
@@ -14,18 +14,18 @@ const (
 )
 
 type TelegramBotAPI struct {
-	api     *tgbotapi.BotAPI
-	updates tgbotapi.UpdatesChannel
+	api     *tgBotAPI.BotAPI
+	updates tgBotAPI.UpdatesChannel
 }
 
 func NewTelegramBotAPI(token string) (BotAPI, error) {
-	api, err := tgbotapi.NewBotAPI(token)
+	api, err := tgBotAPI.NewBotAPI(token)
 	if err != nil {
 		return nil, err
 	}
 
 	// FYI: Start from `UpdateOffsetFromBeginning`
-	u := tgbotapi.NewUpdate(UpdateOffsetFromBeginning)
+	u := tgBotAPI.NewUpdate(UpdateOffsetFromBeginning)
 
 	// FYI: Wait up to `UpdateTimeoutSeconds` seconds for new messages
 	u.Timeout = UpdateTimeoutSeconds
@@ -38,12 +38,12 @@ func NewTelegramBotAPI(token string) (BotAPI, error) {
 	}, nil
 }
 
-func (t *TelegramBotAPI) GetLastEvents() <-chan tgbotapi.Update {
+func (t *TelegramBotAPI) GetLastEvents() <-chan tgBotAPI.Update {
 	return t.updates
 }
 
 func (t *TelegramBotAPI) SendMessage(chatID int64, text string) error {
-	msg := tgbotapi.NewMessage(chatID, text)
+	msg := tgBotAPI.NewMessage(chatID, text)
 	_, err := t.api.Send(msg)
 	return err
 }
@@ -54,7 +54,7 @@ func (t *TelegramBotAPI) Close() {
 }
 
 type MockBotAPI struct {
-	updates chan tgbotapi.Update
+	updates chan tgBotAPI.Update
 	sent    []MockMessage
 }
 
@@ -65,12 +65,12 @@ type MockMessage struct {
 
 func NewMockBotAPI() *MockBotAPI {
 	return &MockBotAPI{
-		updates: make(chan tgbotapi.Update, 10),
+		updates: make(chan tgBotAPI.Update, 10),
 		sent:    make([]MockMessage, 0),
 	}
 }
 
-func (m *MockBotAPI) GetLastEvents() <-chan tgbotapi.Update {
+func (m *MockBotAPI) GetLastEvents() <-chan tgBotAPI.Update {
 	return m.updates
 }
 
@@ -86,7 +86,7 @@ func (m *MockBotAPI) Close() {
 	close(m.updates)
 }
 
-func (m *MockBotAPI) AddUpdate(update tgbotapi.Update) {
+func (m *MockBotAPI) AddUpdate(update tgBotAPI.Update) {
 	m.updates <- update
 }
 

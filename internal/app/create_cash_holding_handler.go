@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"github.com/aniats/FiatFormaggio/internal/domain"
 	"github.com/aniats/FiatFormaggio/internal/service/finance/models"
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	tgBotAPI "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"strconv"
 	"strings"
 )
@@ -16,7 +16,7 @@ func (h *CashHoldingCreationHandler) GetSessionType() SessionType {
 	return SessionCreateCashHolding
 }
 
-func (h *CashHoldingCreationHandler) HandleStep(ctx context.Context, bot *Bot, session *UserSession, msg *tgbotapi.Message) error {
+func (h *CashHoldingCreationHandler) HandleStep(ctx context.Context, bot *Bot, session *UserSession, msg *tgBotAPI.Message) error {
 	switch session.CurrentStep {
 	case StepStart:
 		return h.handleStart(bot, session)

@@ -12,7 +12,7 @@ import (
 
 	"github.com/aniats/FiatFormaggio/internal/domain"
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	tgBotAPI "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 const (
@@ -25,7 +25,7 @@ const (
 )
 
 type BotAPI interface {
-	GetLastEvents() <-chan tgbotapi.Update
+	GetLastEvents() <-chan tgBotAPI.Update
 	SendMessage(chatID int64, text string) error
 	Close()
 }
@@ -62,7 +62,7 @@ type WorkerPool struct {
 
 type Job struct {
 	ctx     context.Context
-	message *tgbotapi.Message
+	message *tgBotAPI.Message
 	bot     *Bot
 }
 
@@ -131,7 +131,7 @@ func (b *Bot) sendMessage(chatID int64, text string) {
 	}
 }
 
-func (b *Bot) handleMessage(ctx context.Context, message *tgbotapi.Message) {
+func (b *Bot) handleMessage(ctx context.Context, message *tgBotAPI.Message) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
@@ -200,7 +200,7 @@ func (b *Bot) handleHelp(chatID int64) {
 	b.sendMessage(chatID, helpText)
 }
 
-func (b *Bot) startSession(ctx context.Context, msg *tgbotapi.Message, sessionType SessionType) {
+func (b *Bot) startSession(ctx context.Context, msg *tgBotAPI.Message, sessionType SessionType) {
 	userID := domain.UserId(msg.From.ID)
 	chatID := msg.Chat.ID
 
@@ -216,7 +216,7 @@ func (b *Bot) startSession(ctx context.Context, msg *tgbotapi.Message, sessionTy
 	}
 }
 
-func (b *Bot) handleSessionMessage(ctx context.Context, msg *tgbotapi.Message, session *UserSession) {
+func (b *Bot) handleSessionMessage(ctx context.Context, msg *tgBotAPI.Message, session *UserSession) {
 	b.sessionManager.UpdateLastActivity(session.UserID)
 
 	if strings.ToLower(msg.Text) == "/cancel" || strings.ToLower(msg.Text) == "отмена" {
