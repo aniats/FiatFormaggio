@@ -72,16 +72,16 @@ type FinanceService interface {
 	EnsureUserExists(ctx context.Context, userID domain.UserId, username string) (bool, error)
 }
 
-type CBRService interface {
-	GetCurrencyRates(ctx context.Context, date time.Time) ([]*domain.CurrencyRateCBR, error)
+type CurrencyService interface {
+	GetCurrencyRates(ctx context.Context) ([]domain.CurrencyRate, error)
 }
 
 type Bot struct {
-	botAPI         BotAPI
-	financeService FinanceService
-	cbrService     CBRService
-	workerPool     *WorkerPool
-	sessionManager *UserSessionManager
+	botAPI          BotAPI
+	financeService  FinanceService
+	currencyService CurrencyService
+	workerPool      *WorkerPool
+	sessionManager  *UserSessionManager
 }
 
 type WorkerPool struct {
@@ -117,23 +117,23 @@ type Job struct {
 	bot     *Bot
 }
 
-func NewBot(botAPI BotAPI, financeService FinanceService, cbrService CBRService) *Bot {
+func NewBot(botAPI BotAPI, financeService FinanceService, currencyService CurrencyService) *Bot {
 	return &Bot{
-		botAPI:         botAPI,
-		financeService: financeService,
-		cbrService:     cbrService,
-		workerPool:     NewWorkerPool(DefaultWorkerPoolSize),
-		sessionManager: NewUserSessionManager(),
+		botAPI:          botAPI,
+		financeService:  financeService,
+		currencyService: currencyService,
+		workerPool:      NewWorkerPool(DefaultWorkerPoolSize),
+		sessionManager:  NewUserSessionManager(),
 	}
 }
 
-func NewBotFromToken(token string, financeService FinanceService, cbrService CBRService) (*Bot, error) {
+func NewBotFromToken(token string, financeService FinanceService, currencyService CurrencyService) (*Bot, error) {
 	botAPI, err := NewTelegramBotAPI(token)
 	if err != nil {
 		return nil, err
 	}
 
-	return NewBot(botAPI, financeService, cbrService), nil
+	return NewBot(botAPI, financeService, currencyService), nil
 }
 
 func (b *Bot) Start(ctx context.Context) error {

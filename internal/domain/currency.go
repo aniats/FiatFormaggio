@@ -3,6 +3,7 @@ package domain
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 type CurrencyName string
@@ -35,10 +36,12 @@ type CurrencyRateCBR struct {
 }
 
 type CurrencyRate struct {
-	Currency       CurrencyName
-	RateMinorUnits int64
-	BaseCurrency   CurrencyName
-	Source         string
+	ID             int64        `db:"id"`
+	Currency       CurrencyName `db:"currency"`
+	RateMinorUnits int64        `db:"rate_minor_units"`
+	BaseCurrency   CurrencyName `db:"base_currency"`
+	Source         string       `db:"source"`
+	UpdatedAt      time.Time    `db:"updated_at"`
 }
 
 var currencyToHumanMap = map[CurrencyName]string{

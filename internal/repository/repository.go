@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 	"github.com/aniats/FiatFormaggio/internal/domain"
 )
 
@@ -30,12 +31,19 @@ type SavingAccountRepository interface {
 	GetSavingAccountsByUserID(ctx context.Context, userId domain.UserId) ([]domain.SavingAccount, error)
 }
 
+type CurrencyRateRepository interface {
+	UpsertCurrencyRate(ctx context.Context, rate *domain.CurrencyRate) error
+	GetCurrencyRates(ctx context.Context) ([]domain.CurrencyRate, error)
+	GetLastUpdateTime(ctx context.Context) (*time.Time, error)
+}
+
 type Repository interface {
 	UserRepository
 	DepositRepository
 	CashHoldingRepository
 	BrokerageAccountRepository
 	SavingAccountRepository
+	CurrencyRateRepository
 
 	Close() error
 	HealthCheck(ctx context.Context) error

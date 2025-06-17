@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/aniats/FiatFormaggio/internal/service/cbr"
+	"github.com/aniats/FiatFormaggio/internal/service/currency"
 	"github.com/aniats/FiatFormaggio/internal/service/finance"
 	"log"
 	"net/http"
@@ -36,17 +37,23 @@ func main() {
 	}()
 
 	cbrService := initCBRService()
-	financeService := finance.NewFinanceService(repo, cbrService)
+	currencyService := initCurrencyService(repo, cbrService)
+	financeService := finance.NewFinanceService(repo, currencyService)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if err := testServices(ctx, financeService, cbrService); err != nil {
+	if err := currencyService.Start(ctx); err != nil {
+		log.Fatalf("Failed to start currency service: %v", err)
+	}
+	defer currencyService.Stop()
+
+	if err := testServices(ctx, financeService, currencyService); err != nil {
 		log.Printf("Service test error: %v", err)
 	}
 
 	token := os.Getenv("TELEGRAM_BOT_TOKEN")
-	if err := startBot(ctx, token, financeService, cbrService); err != nil {
+	if err := startBot(ctx, token, financeService, currencyService); err != nil {
 		log.Fatalf("Failed to start bot: %v", err)
 	}
 
@@ -85,7 +92,13 @@ func initCBRService() *cbr.CBRService {
 	return cbrService
 }
 
-func testServices(ctx context.Context, financeService *finance.FinanceService, cbrService *cbr.CBRService) error {
+func initCurrencyService(repo repository.Repository, cbrService *cbr.CBRService) *currency.CachedCurrencyService {
+	currencyService := currency.NewCachedCurrencyService(repo, cbrService)
+	log.Println("Currency caching service initialized successfully")
+	return currencyService
+}
+
+func testServices(ctx context.Context, financeService *finance.FinanceService, currencyService *currency.CachedCurrencyService) error {
 	userID := domain.UserId(123456789)
 	deposits, err := financeService.GetDepositsByUserID(ctx, userID)
 	if err != nil {
@@ -93,21 +106,21 @@ func testServices(ctx context.Context, financeService *finance.FinanceService, c
 	}
 	log.Printf("Successfully retrieved %d deposits for user %d", len(deposits), userID)
 
-	rates, err := cbrService.GetCurrencyRates(ctx, time.Now())
+	rates, err := currencyService.GetCurrencyRates(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get currency rates: %w", err)
 	}
-	log.Printf("Successfully retrieved currency rates: %d currencies", len(rates))
+	log.Printf("Successfully retrieved cached currency rates: %d currencies", len(rates))
 
 	return nil
 }
 
-func startBot(ctx context.Context, token string, financeService *finance.FinanceService, cbrService *cbr.CBRService) error {
+func startBot(ctx context.Context, token string, financeService *finance.FinanceService, currencyService *currency.CachedCurrencyService) error {
 	if token == "" {
 		return fmt.Errorf("TELEGRAM_BOT_TOKEN environment variable is required")
 	}
 
-	bot, err := app.NewBotFromToken(token, financeService, cbrService)
+	bot, err := app.NewBotFromToken(token, financeService, currencyService)
 	if err != nil {
 		return fmt.Errorf("failed to create bot: %w", err)
 	}

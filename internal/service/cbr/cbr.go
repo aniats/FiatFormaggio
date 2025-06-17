@@ -40,24 +40,11 @@ type Valute struct {
 }
 
 func (s *CBRService) GetCurrencyRates(ctx context.Context, date time.Time) ([]*domain.CurrencyRateCBR, error) {
-	url := fmt.Sprintf("https://www.cbr.ru/scripts/XML_daily.asp?date_req=%s", date.Format("02/01/2006"))
-
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	resp, err := s.fetchCBRData(ctx, date)
 	if err != nil {
-		return nil, fmt.Errorf("error creating request: %w", err)
-	}
-
-	req.Header.Set("User-Agent", "Mozilla/5.0")
-
-	resp, err := s.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
+		return nil, err
 	}
 	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
 
 	decoder := xml.NewDecoder(resp.Body)
 	decoder.CharsetReader = charset.NewReaderLabel
@@ -71,12 +58,35 @@ func (s *CBRService) GetCurrencyRates(ctx context.Context, date time.Time) ([]*d
 	for _, valute := range valCurs.Valutes {
 		rate, err := s.parseValuteToRate(valute)
 		if err != nil {
-			continue // Skip invalid rates
+			continue
 		}
 		rates = append(rates, rate)
 	}
 
 	return rates, nil
+}
+
+func (s *CBRService) fetchCBRData(ctx context.Context, date time.Time) (*http.Response, error) {
+	url := fmt.Sprintf("https://www.cbr.ru/scripts/XML_daily.asp?date_req=%s", date.Format("02/01/2006"))
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("error creating request: %w", err)
+	}
+
+	req.Header.Set("User-Agent", "Mozilla/5.0")
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	return resp, nil
 }
 
 func (s *CBRService) parseValuteToRate(valute Valute) (*domain.CurrencyRateCBR, error) {

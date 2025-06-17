@@ -3,11 +3,12 @@ package app
 import (
 	"context"
 	"fmt"
-	"time"
+
+	"github.com/aniats/FiatFormaggio/internal/domain"
 )
 
 func (b *Bot) sendCurrencyRatesCommand(ctx context.Context, chatID int64) {
-	rates, err := b.cbrService.GetCurrencyRates(ctx, time.Now())
+	rates, err := b.currencyService.GetCurrencyRates(ctx)
 	if err != nil {
 		b.sendMessage(chatID, "❌ Ошибка получения курсов валют. Попробуйте позже.")
 		return
@@ -18,16 +19,21 @@ func (b *Bot) sendCurrencyRatesCommand(ctx context.Context, chatID int64) {
 		return
 	}
 
-	text := fmt.Sprintf("💱 Курсы валют ЦБ РФ на %s:\n\n", time.Now().Format("02.01.2006"))
+	lastUpdateText := "сегодня"
+	if len(rates) > 0 {
+		lastUpdateText = rates[0].UpdatedAt.Format("02.01.2006 15:04")
+	}
 
-	majorCurrencies := []string{"USD", "EUR", "GBP", "JPY", "CNY"}
-	majorRatesShown := make(map[string]bool)
+	text := fmt.Sprintf("💱 Курсы валют ЦБ РФ (обновлено: %s):\n\n", lastUpdateText)
+
+	majorCurrencies := []domain.CurrencyName{domain.USD, domain.EUR, domain.GBP, domain.JPY, domain.CNY}
+	majorRatesShown := make(map[domain.CurrencyName]bool)
 
 	for _, currencyCode := range majorCurrencies {
 		for _, rate := range rates {
-			if rate.CharCode == currencyCode {
-				unitRate := rate.Value / float64(rate.Nominal)
-				text += fmt.Sprintf("%s: %.4f ₽\n", rate.CharCode, unitRate)
+			if rate.Currency == currencyCode {
+				unitRate := float64(rate.RateMinorUnits) / 100.0
+				text += fmt.Sprintf("%s: %.4f ₽\n", rate.Currency, unitRate)
 				majorRatesShown[currencyCode] = true
 				break
 			}
@@ -37,9 +43,9 @@ func (b *Bot) sendCurrencyRatesCommand(ctx context.Context, chatID int64) {
 	text += "\n📈 Другие валюты:\n"
 
 	for _, rate := range rates {
-		if !majorRatesShown[rate.CharCode] {
-			unitRate := rate.Value / float64(rate.Nominal)
-			text += fmt.Sprintf("%s: %.4f ₽\n", rate.CharCode, unitRate)
+		if !majorRatesShown[rate.Currency] {
+			unitRate := float64(rate.RateMinorUnits) / 100.0
+			text += fmt.Sprintf("%s: %.4f ₽\n", rate.Currency, unitRate)
 		}
 	}
 
