@@ -37,6 +37,8 @@ type FinanceService interface {
 	CreateBrokerageAccount(ctx context.Context, req *models.CreateBrokerageAccountRequest) (*domain.BrokerageAccount, error)
 	GetSavingAccountsByUserID(ctx context.Context, userID domain.UserId) ([]domain.SavingAccount, error)
 	CreateSavingAccount(ctx context.Context, req *models.CreateSavingAccountRequest) (*domain.SavingAccount, error)
+	GetCashHoldingsByUserID(ctx context.Context, userID domain.UserId) ([]domain.CashHolding, error)
+	CreateCashHolding(ctx context.Context, req *models.CreateCashHoldingRequest) (*domain.CashHolding, error)
 	EnsureUserExists(ctx context.Context, userID domain.UserId, username string) (bool, error)
 }
 
@@ -170,6 +172,10 @@ func (b *Bot) handleMessage(ctx context.Context, message *tgbotapi.Message) {
 		b.handleSavingAccountsCommand(ctx, chatID, domain.UserId(message.From.ID))
 	case "create_saving_account", "создать_накопительный_счет":
 		b.startSession(ctx, message, SessionCreateSavingAccount)
+	case "cash_holdings", "наличные", "наличные_счета":
+		b.handleCashHoldingsCommand(ctx, chatID, domain.UserId(message.From.ID))
+	case "create_cash_holding", "создать_наличный_счет":
+		b.startSession(ctx, message, SessionCreateCashHolding)
 	case "rates", "курсы", "валюты":
 		b.handleCurrencyRatesCommand(ctx, chatID)
 	default:
@@ -186,6 +192,8 @@ func (b *Bot) handleHelp(chatID int64) {
 		/create_brokerage_account - Создать брокерский счет
 		/saving_accounts - Показать накопительные счета
 		/create_saving_account - Создать накопительный счет
+		/cash_holdings - Показать наличные счета
+		/create_cash_holding - Создать наличный счет
 		/rates - Курсы валют ЦБ РФ
 	`
 

@@ -14,10 +14,9 @@ func (repo *PostgresRepository) CreateCashHolding(ctx context.Context, cash *dom
             name, 
             amount_minor_units, 
             currency
-        ) VALUES ($1, $2, $3, $4)
-        RETURNING id, created_at, updated_at`
+        ) VALUES ($1, $2, $3, $4)`
 
-	err := repo.db.QueryRowContext(
+	_, err := repo.db.ExecContext(
 		ctx,
 		query,
 		cash.UserId,

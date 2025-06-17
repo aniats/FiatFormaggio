@@ -14,6 +14,7 @@ const (
 	SessionCreateDeposit                 SessionType = "create_deposit"
 	SessionCreateSavingAccount           SessionType = "create_saving_account"
 	SessionCreateBrokerageAccountSession SessionType = "create_brokerage_account_session"
+	SessionCreateCashHolding             SessionType = "create_cash_holding"
 )
 
 type SessionStep string
@@ -67,6 +68,7 @@ func NewUserSessionManager() *UserSessionManager {
 	manager.RegisterHandler(&DepositCreationHandler{})
 	manager.RegisterHandler(&BrokerageAccountCreationHandler{})
 	manager.RegisterHandler(&SavingAccountCreationHandler{})
+	manager.RegisterHandler(&CashHoldingCreationHandler{})
 	// Add more handlers as needed:
 	// manager.RegisterHandler(&ExpenseCreationHandler{})
 	// manager.RegisterHandler(&TransferHandler{})
