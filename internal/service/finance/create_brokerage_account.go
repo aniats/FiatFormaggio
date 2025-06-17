@@ -48,20 +48,20 @@ func (s *FinanceService) validateCreateBrokerageAccountRequest(req *models.Creat
 	}
 
 	if req.UserID <= 0 {
-		return fmt.Errorf("user ID must be positive")
+		return fmt.Errorf("ID пользователя должен быть положительным")
 	}
 
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
-		return fmt.Errorf("name is required")
+		return fmt.Errorf("название обязательно")
 	}
 
 	if len(name) > 255 {
-		return fmt.Errorf("name too long (max 255 characters)")
+		return fmt.Errorf("название слишком длинное (максимум 255 символов)")
 	}
 
 	if req.AmountRUB < 0 {
-		return fmt.Errorf("amount cannot be negative")
+		return fmt.Errorf("сумма не может быть отрицательной")
 	}
 
 	if req.AmountRUB > 1000000000 {

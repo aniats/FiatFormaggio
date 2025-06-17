@@ -107,31 +107,31 @@ func (s *FinanceService) getSupportedCurrenciesString() string {
 
 func (s *FinanceService) validateCreateDepositRequest(req *models.CreateDepositRequest) error {
 	if req == nil {
-		return fmt.Errorf("request cannot be nil")
+		return fmt.Errorf("запрос не может быть пустым")
 	}
 
 	if req.UserID <= 0 {
-		return fmt.Errorf("user ID must be positive")
+		return fmt.Errorf("ID пользователя должен быть положительным")
 	}
 
 	if strings.TrimSpace(req.Name) == "" {
-		return fmt.Errorf("deposit name cannot be empty")
+		return fmt.Errorf("название депозита не может быть пустым")
 	}
 
 	if len(req.Name) > 255 {
-		return fmt.Errorf("deposit name too long (max 255 characters)")
+		return fmt.Errorf("название депозита слишком длинное (максимум 255 символов)")
 	}
 
 	if req.AmountRUB <= 0 {
-		return fmt.Errorf("amount must be positive")
+		return fmt.Errorf("сумма должна быть положительной")
 	}
 
 	if req.AmountRUB > 1000000000 {
-		return fmt.Errorf("amount too large (max 1,000,000,000)")
+		return fmt.Errorf("сумма слишком большая (максимум 1,000,000,000)")
 	}
 
 	if req.AmountRUB < 1 {
-		return fmt.Errorf("minimum deposit amount is 1")
+		return fmt.Errorf("минимальная сумма депозита: 1")
 	}
 
 	if req.InterestRatePercent != nil {

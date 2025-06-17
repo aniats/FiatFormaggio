@@ -77,7 +77,7 @@ func (usm *UserSessionManager) RegisterHandler(handler SessionHandler) {
 func (usm *UserSessionManager) StartSession(userID domain.UserId, chatID int64, sessionType SessionType) (*UserSession, error) {
 	handler, exists := usm.handlers[sessionType]
 	if !exists {
-		return nil, fmt.Errorf("no handler registered for session type: %s", sessionType)
+		return nil, fmt.Errorf("нет зарегистрированного обработчика для типа сессии: %s", sessionType)
 	}
 
 	session := &UserSession{

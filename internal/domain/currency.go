@@ -178,7 +178,7 @@ func CurrencyFromHuman(human string) (CurrencyName, error) {
 		return currency, nil
 	}
 
-	return "", fmt.Errorf("unknown currency: %s", human)
+	return "", fmt.Errorf("неизвестная валюта: %s", human)
 }
 
 func (c CurrencyName) FormatAmount(amount float64) string {

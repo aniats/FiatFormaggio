@@ -244,7 +244,7 @@ func (h *BrokerageAccountCreationHandler) parseAccountType(input string) (domain
 	case "margin", "маржинальный":
 		return domain.Margin, nil
 	default:
-		return "", fmt.Errorf("unsupported account type: %s", input)
+		return "", fmt.Errorf("неподдерживаемый тип счета: %s", input)
 	}
 }
 
