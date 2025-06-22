@@ -14,10 +14,12 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/otel"
 
 	"github.com/aniats/FiatFormaggio/internal/app"
 	"github.com/aniats/FiatFormaggio/internal/domain"
+	"github.com/aniats/FiatFormaggio/internal/metrics"
 	"github.com/aniats/FiatFormaggio/internal/repository"
 	"github.com/aniats/FiatFormaggio/internal/repository/postgres"
 )
@@ -58,6 +60,9 @@ func main() {
 	if err := testServices(ctx, financeService, currencyService); err != nil {
 		log.Printf("Service test error: %v", err)
 	}
+
+	metrics.Init()
+	go startMetricsServer()
 
 	token := os.Getenv("TELEGRAM_BOT_TOKEN")
 	if err := startBot(ctx, token, financeService, currencyService); err != nil {
@@ -156,4 +161,12 @@ func startBot(ctx context.Context, token string, financeService *finance.Finance
 	log.Println("Shutting down...")
 
 	return nil
+}
+
+func startMetricsServer() {
+	http.Handle("/metrics", promhttp.Handler())
+	log.Println("Metrics server starting on :8080")
+	if err := http.ListenAndServe(":8080", nil); err != nil {
+		log.Printf("Metrics server error: %v", err)
+	}
 }

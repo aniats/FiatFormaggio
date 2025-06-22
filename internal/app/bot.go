@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/aniats/FiatFormaggio/internal/domain"
+	"github.com/aniats/FiatFormaggio/internal/metrics"
 	"github.com/aniats/FiatFormaggio/internal/service/finance/models"
 	tgBotAPI "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"go.opentelemetry.io/otel"
@@ -192,9 +193,13 @@ func (b *Bot) sendMessage(chatID int64, text string) {
 }
 
 func (b *Bot) handleMessage(ctx context.Context, message *Message) {
+	start := time.Now()
 	tracer := otel.Tracer("fiat-formaggio")
 	ctx, span := tracer.Start(ctx, "Bot.handleMessage")
-	defer span.End()
+	defer func() {
+		span.End()
+		metrics.RecordRequest(string(CommandType(strings.ToLower(message.Command()))), time.Since(start))
+	}()
 
 	span.SetAttributes(
 		attribute.Int64("user.id", message.UserID),
@@ -272,6 +277,8 @@ func (b *Bot) startSession(ctx context.Context, msg *Message, sessionType Sessio
 		b.sendMessage(chatID, fmt.Sprintf("❌ Не удалось начать сессию: %s", err.Error()))
 		return
 	}
+	
+	metrics.IncrementActiveSessions()
 
 	if err := session.Handler.HandleStep(ctx, b, session, msg); err != nil {
 		b.sendMessage(chatID, fmt.Sprintf("❌ Ошибка: %s", err.Error()))

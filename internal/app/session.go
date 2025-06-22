@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/aniats/FiatFormaggio/internal/domain"
+	"github.com/aniats/FiatFormaggio/internal/metrics"
 	"time"
 )
 
@@ -101,6 +102,7 @@ func (usm *UserSessionManager) GetSession(userID domain.UserId) *UserSession {
 
 func (usm *UserSessionManager) ClearSession(userID domain.UserId) {
 	delete(usm.sessions, userID)
+	metrics.DecrementActiveSessions()
 }
 
 func (usm *UserSessionManager) UpdateLastActivity(userID domain.UserId) {

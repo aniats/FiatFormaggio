@@ -49,6 +49,42 @@ services:
       - fiat_network
     restart: unless-stopped
 
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: fiat_formaggio_prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    configs:
+      - source: prometheus_config
+        target: /etc/prometheus/prometheus.yml
+    networks:
+      - fiat_network
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: fiat_formaggio_grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - fiat_network
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+
   app:
     build:
       context: .
@@ -71,7 +107,23 @@ services:
 
 volumes:
   postgres_data:
+  prometheus_data:
+  grafana_data:
 
 networks:
   fiat_network:
     driver: bridge
+
+configs:
+  prometheus_config:
+    content: |
+      global:
+        scrape_interval: 15s
+        evaluation_interval: 15s
+
+      scrape_configs:
+        - job_name: 'fiat-formaggio-app'
+          static_configs:
+            - targets: ['host.docker.internal:8080'] # targets: ['app:8080']
+          metrics_path: '/metrics'
+          scrape_interval: 5s
