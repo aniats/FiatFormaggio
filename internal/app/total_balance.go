@@ -4,13 +4,23 @@ import (
 	"context"
 	"fmt"
 	"sort"
-
 	"strings"
 
 	"github.com/aniats/FiatFormaggio/internal/domain"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 func (b *Bot) sendTotalBalanceCommand(ctx context.Context, chatID int64, userID domain.UserId) {
+	tracer := otel.Tracer("fiat-formaggio")
+	ctx, span := tracer.Start(ctx, "Bot.sendTotalBalanceCommand")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.Int64("user.id", int64(userID)),
+		attribute.Int64("chat.id", chatID),
+	)
+
 	rates, err := b.currencyService.GetCurrencyRates(ctx)
 	if err != nil {
 		b.sendMessage(chatID, "❌ Ошибка получения курсов валют. Попробуйте позже.")
@@ -81,7 +91,7 @@ func buildExchangeRateMap(rates []domain.CurrencyRate) map[domain.CurrencyName]f
 
 	for _, rate := range rates {
 		if rate.BaseCurrency == domain.RUB {
-			exchangeRates[rate.Currency] = float64(rate.RateMinorUnits) / 100.0
+			exchangeRates[rate.Currency] = float64(rate.RateMinorUnits) / DefaultMinorUnits
 		}
 	}
 
@@ -103,7 +113,7 @@ func calculateDepositsSummary(deposits []domain.Deposit, exchangeRates map[domai
 	var totalRUB float64
 
 	for _, deposit := range deposits {
-		amount := float64(deposit.AmountMinorUnits) / 100.0
+		amount := float64(deposit.AmountMinorUnits) / DefaultMinorUnits
 		currency := deposit.Currency
 		amountRUB := convertToRUB(amount, currency, exchangeRates)
 
@@ -119,7 +129,7 @@ func calculateSavingAccountsSummary(accounts []domain.SavingAccount, exchangeRat
 	var totalRUB float64
 
 	for _, account := range accounts {
-		amount := float64(account.AmountMinorUnits) / 100.0
+		amount := float64(account.AmountMinorUnits) / DefaultMinorUnits
 		currency := account.Currency
 		amountRUB := convertToRUB(amount, currency, exchangeRates)
 
@@ -135,7 +145,7 @@ func calculateBrokerageAccountsSummary(accounts []domain.BrokerageAccount, excha
 	var totalRUB float64
 
 	for _, account := range accounts {
-		amount := float64(account.AmountMinorUnits) / 100.0
+		amount := float64(account.AmountMinorUnits) / DefaultMinorUnits
 		currency := account.Currency
 		amountRUB := convertToRUB(amount, currency, exchangeRates)
 
@@ -151,7 +161,7 @@ func calculateCashHoldingsSummary(holdings []domain.CashHolding, exchangeRates m
 	var totalRUB float64
 
 	for _, holding := range holdings {
-		amount := float64(holding.AmountMinorUnits) / 100.0
+		amount := float64(holding.AmountMinorUnits) / DefaultMinorUnits
 		currency := holding.Currency
 		amountRUB := convertToRUB(amount, currency, exchangeRates)
 

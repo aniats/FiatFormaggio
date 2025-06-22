@@ -5,9 +5,22 @@ import (
 	"fmt"
 	"github.com/aniats/FiatFormaggio/internal/domain"
 	"log"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 )
 
+
 func (b *Bot) sendCashHoldingsCommand(ctx context.Context, chatID int64, userID domain.UserId) {
+	tracer := otel.Tracer("fiat-formaggio")
+	ctx, span := tracer.Start(ctx, "Bot.sendCashHoldingsCommand")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.Int64("user.id", int64(userID)),
+		attribute.Int64("chat.id", chatID),
+	)
+
 	holdings, err := b.financeService.GetCashHoldingsByUserID(ctx, userID)
 	if err != nil {
 		log.Printf("Ошибка при получении наличных счетов для пользователя %d: %v", userID, err)
@@ -22,10 +35,10 @@ func (b *Bot) sendCashHoldingsCommand(ctx context.Context, chatID int64, userID 
 
 	text := "💵 Ваши наличные счета:\n\n"
 	for i, holding := range holdings {
-		amount := float64(holding.AmountMinorUnits) / defaultMinorUnits
+		amount := float64(holding.AmountMinorUnits) / DefaultMinorUnits
 
 		text += fmt.Sprintf("%d. %s\n", i+1, holding.Name)
-		text += fmt.Sprintf("   💰 %s\n", formatAmount(amount, holding.Currency.String()))
+		text += fmt.Sprintf("   💰 %s\n", FormatAmount(amount, holding.Currency.String()))
 		text += "\n"
 	}
 
@@ -33,3 +46,4 @@ func (b *Bot) sendCashHoldingsCommand(ctx context.Context, chatID int64, userID 
 
 	b.sendMessage(chatID, text)
 }
+

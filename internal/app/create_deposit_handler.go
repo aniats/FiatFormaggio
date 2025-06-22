@@ -8,6 +8,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type DepositCreationHandler struct{}
@@ -17,6 +20,16 @@ func (h *DepositCreationHandler) GetSessionType() SessionType {
 }
 
 func (h *DepositCreationHandler) HandleStep(ctx context.Context, bot *Bot, session *UserSession, msg *Message) error {
+	tracer := otel.Tracer("fiat-formaggio")
+	ctx, span := tracer.Start(ctx, "DepositCreationHandler.HandleStep")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.Int64("user.id", int64(session.UserID)),
+		attribute.String("session.step", string(session.CurrentStep)),
+		attribute.String("session.type", "create_deposit"),
+	)
+
 	switch session.CurrentStep {
 	case StepStart:
 		return h.handleStart(bot, session)
@@ -295,6 +308,16 @@ func (h *DepositCreationHandler) FormatConfirmation(session *UserSession) string
 }
 
 func (h *DepositCreationHandler) CompleteSession(ctx context.Context, bot *Bot, session *UserSession) error {
+	tracer := otel.Tracer("fiat-formaggio")
+	ctx, span := tracer.Start(ctx, "DepositCreationHandler.CompleteSession")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.Int64("user.id", int64(session.UserID)),
+		attribute.String("deposit.name", session.GetString("name")),
+		attribute.Float64("deposit.amount", session.GetFloat("amount")),
+	)
+
 	req := &models.CreateDepositRequest{
 		UserID:    session.UserID,
 		Name:      session.GetString("name"),

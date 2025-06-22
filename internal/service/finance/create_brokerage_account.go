@@ -7,9 +7,19 @@ import (
 
 	"github.com/aniats/FiatFormaggio/internal/domain"
 	"github.com/aniats/FiatFormaggio/internal/service/finance/models"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 func (s *FinanceService) CreateBrokerageAccount(ctx context.Context, req *models.CreateBrokerageAccountRequest) (*domain.BrokerageAccount, error) {
+	tracer := otel.Tracer("fiat-formaggio")
+	ctx, span := tracer.Start(ctx, "FinanceService.CreateBrokerageAccount")
+	defer span.End()
+
+	if req != nil {
+		span.SetAttributes(attribute.Int64("user.id", int64(req.UserID)))
+	}
+
 	if err := s.validateCreateBrokerageAccountRequest(req); err != nil {
 		return nil, fmt.Errorf("validation failed: %w", err)
 	}

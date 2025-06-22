@@ -3,16 +3,16 @@ package app
 import (
 	"context"
 	"fmt"
-	"github.com/aniats/FiatFormaggio/internal/service/finance/models"
-
 	"log"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/aniats/FiatFormaggio/internal/domain"
-
+	"github.com/aniats/FiatFormaggio/internal/service/finance/models"
 	tgBotAPI "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 const (
@@ -192,6 +192,16 @@ func (b *Bot) sendMessage(chatID int64, text string) {
 }
 
 func (b *Bot) handleMessage(ctx context.Context, message *Message) {
+	tracer := otel.Tracer("fiat-formaggio")
+	ctx, span := tracer.Start(ctx, "Bot.handleMessage")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.Int64("user.id", message.UserID),
+		attribute.Int64("chat.id", message.ChatID),
+		attribute.String("message.command", message.Command()),
+	)
+
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
@@ -246,7 +256,15 @@ func (b *Bot) handleMessage(ctx context.Context, message *Message) {
 }
 
 func (b *Bot) startSession(ctx context.Context, msg *Message, sessionType SessionType) {
+	tracer := otel.Tracer("fiat-formaggio")
+	ctx, span := tracer.Start(ctx, "Bot.startSession")
+	defer span.End()
+
 	userID := domain.UserId(msg.UserID)
+	span.SetAttributes(
+		attribute.Int64("user.id", msg.UserID),
+		attribute.String("session.type", string(sessionType)),
+	)
 	chatID := msg.ChatID
 
 	session, err := b.sessionManager.StartSession(userID, chatID, sessionType)
@@ -262,6 +280,16 @@ func (b *Bot) startSession(ctx context.Context, msg *Message, sessionType Sessio
 }
 
 func (b *Bot) handleSessionMessage(ctx context.Context, msg *Message, session *UserSession) {
+	tracer := otel.Tracer("fiat-formaggio")
+	ctx, span := tracer.Start(ctx, "Bot.handleSessionMessage")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.Int64("user.id", int64(session.UserID)),
+		attribute.String("session.step", string(session.CurrentStep)),
+		attribute.String("session.type", string(session.Type)),
+	)
+
 	b.sessionManager.UpdateLastActivity(session.UserID)
 
 	if strings.ToLower(msg.Text) == "/cancel" || strings.ToLower(msg.Text) == "отмена" {

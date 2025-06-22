@@ -8,6 +8,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type SavingAccountCreationHandler struct{}
@@ -17,6 +20,16 @@ func (h *SavingAccountCreationHandler) GetSessionType() SessionType {
 }
 
 func (h *SavingAccountCreationHandler) HandleStep(ctx context.Context, bot *Bot, session *UserSession, msg *Message) error {
+	tracer := otel.Tracer("fiat-formaggio")
+	ctx, span := tracer.Start(ctx, "SavingAccountCreationHandler.HandleStep")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.Int64("user.id", int64(session.UserID)),
+		attribute.String("session.step", string(session.CurrentStep)),
+		attribute.String("session.type", "create_saving_account"),
+	)
+
 	switch session.CurrentStep {
 	case StepStart:
 		return h.handleStart(bot, session)
@@ -334,7 +347,15 @@ func (h *SavingAccountCreationHandler) handleConfirmation(ctx context.Context, b
 }
 
 func (h *SavingAccountCreationHandler) CompleteSession(ctx context.Context, bot *Bot, session *UserSession) error {
+	tracer := otel.Tracer("fiat-formaggio")
+	ctx, span := tracer.Start(ctx, "SavingAccountCreationHandler.CompleteSession")
+	defer span.End()
+
 	name := session.GetData("name").(string)
+	span.SetAttributes(
+		attribute.Int64("user.id", int64(session.UserID)),
+		attribute.String("saving_account.name", name),
+	)
 	amount := session.GetData("amount").(float64)
 	currency := session.GetData("currency").(domain.CurrencyName)
 

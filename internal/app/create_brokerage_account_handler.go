@@ -7,6 +7,9 @@ import (
 	"github.com/aniats/FiatFormaggio/internal/service/finance/models"
 	"strconv"
 	"strings"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type BrokerageAccountCreationHandler struct{}
@@ -16,6 +19,16 @@ func (h *BrokerageAccountCreationHandler) GetSessionType() SessionType {
 }
 
 func (h *BrokerageAccountCreationHandler) HandleStep(ctx context.Context, bot *Bot, session *UserSession, msg *Message) error {
+	tracer := otel.Tracer("fiat-formaggio")
+	ctx, span := tracer.Start(ctx, "BrokerageAccountCreationHandler.HandleStep")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.Int64("user.id", int64(session.UserID)),
+		attribute.String("session.step", string(session.CurrentStep)),
+		attribute.String("session.type", "create_brokerage_account"),
+	)
+
 	switch session.CurrentStep {
 	case StepStart:
 		return h.handleStart(bot, session)
@@ -318,7 +331,15 @@ func (h *BrokerageAccountCreationHandler) handleConfirmation(ctx context.Context
 }
 
 func (h *BrokerageAccountCreationHandler) CompleteSession(ctx context.Context, bot *Bot, session *UserSession) error {
+	tracer := otel.Tracer("fiat-formaggio")
+	ctx, span := tracer.Start(ctx, "BrokerageAccountCreationHandler.CompleteSession")
+	defer span.End()
+
 	name := session.GetData("name").(string)
+	span.SetAttributes(
+		attribute.Int64("user.id", int64(session.UserID)),
+		attribute.String("brokerage_account.name", name),
+	)
 	amount := session.GetData("amount").(float64)
 	currency := session.GetData("currency").(domain.CurrencyName)
 	broker := session.GetData("broker").(*string)

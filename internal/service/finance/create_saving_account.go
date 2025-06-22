@@ -7,9 +7,19 @@ import (
 
 	"github.com/aniats/FiatFormaggio/internal/domain"
 	"github.com/aniats/FiatFormaggio/internal/service/finance/models"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 func (s *FinanceService) CreateSavingAccount(ctx context.Context, req *models.CreateSavingAccountRequest) (*domain.SavingAccount, error) {
+	tracer := otel.Tracer("fiat-formaggio")
+	ctx, span := tracer.Start(ctx, "FinanceService.CreateSavingAccount")
+	defer span.End()
+
+	if req != nil {
+		span.SetAttributes(attribute.Int64("user.id", int64(req.UserID)))
+	}
+
 	if err := s.validateCreateSavingAccountRequest(req); err != nil {
 		return nil, fmt.Errorf("validation failed: %w", err)
 	}

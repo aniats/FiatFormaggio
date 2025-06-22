@@ -3,7 +3,6 @@ package cbr
 import (
 	"context"
 	"encoding/xml"
-
 	"fmt"
 	"net/http"
 	"strconv"
@@ -12,6 +11,8 @@ import (
 
 	"github.com/aniats/FiatFormaggio/internal/domain"
 	"golang.org/x/net/html/charset"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type CBRService struct {
@@ -40,6 +41,14 @@ type Valute struct {
 }
 
 func (s *CBRService) GetCurrencyRates(ctx context.Context, date time.Time) ([]*domain.CurrencyRateCBR, error) {
+	tracer := otel.Tracer("fiat-formaggio")
+	ctx, span := tracer.Start(ctx, "CBRService.GetCurrencyRates")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("cbr.date", date.Format("2006-01-02")),
+	)
+
 	resp, err := s.fetchCBRData(ctx, date)
 	if err != nil {
 		return nil, err
@@ -67,7 +76,15 @@ func (s *CBRService) GetCurrencyRates(ctx context.Context, date time.Time) ([]*d
 }
 
 func (s *CBRService) fetchCBRData(ctx context.Context, date time.Time) (*http.Response, error) {
+	tracer := otel.Tracer("fiat-formaggio")
+	ctx, span := tracer.Start(ctx, "CBRService.fetchCBRData")
+	defer span.End()
+
 	url := fmt.Sprintf("https://www.cbr.ru/scripts/XML_daily.asp?date_req=%s", date.Format("02/01/2006"))
+	span.SetAttributes(
+		attribute.String("http.url", url),
+		attribute.String("cbr.date", date.Format("2006-01-02")),
+	)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {

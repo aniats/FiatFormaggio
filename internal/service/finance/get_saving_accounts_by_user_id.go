@@ -5,9 +5,17 @@ import (
 	"fmt"
 
 	"github.com/aniats/FiatFormaggio/internal/domain"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 func (s *FinanceService) GetSavingAccountsByUserID(ctx context.Context, userID domain.UserId) ([]domain.SavingAccount, error) {
+	tracer := otel.Tracer("fiat-formaggio")
+	ctx, span := tracer.Start(ctx, "FinanceService.GetSavingAccountsByUserID")
+	defer span.End()
+
+	span.SetAttributes(attribute.Int64("user.id", int64(userID)))
+
 	if userID <= 0 {
 		return nil, fmt.Errorf("invalid user ID: %d", userID)
 	}

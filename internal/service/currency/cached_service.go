@@ -9,6 +9,7 @@ import (
 
 	"github.com/aniats/FiatFormaggio/internal/domain"
 	"github.com/aniats/FiatFormaggio/internal/repository"
+	"go.opentelemetry.io/otel"
 )
 
 const (
@@ -62,6 +63,10 @@ func (s *CachedCurrencyService) Stop() {
 }
 
 func (s *CachedCurrencyService) GetCurrencyRates(ctx context.Context) ([]domain.CurrencyRate, error) {
+	tracer := otel.Tracer("fiat-formaggio")
+	ctx, span := tracer.Start(ctx, "CachedCurrencyService.GetCurrencyRates")
+	defer span.End()
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 

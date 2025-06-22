@@ -5,9 +5,22 @@ import (
 	"fmt"
 	"github.com/aniats/FiatFormaggio/internal/domain"
 	"log"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 )
 
+
 func (b *Bot) sendSavingAccountsCommand(ctx context.Context, chatID int64, userID domain.UserId) {
+	tracer := otel.Tracer("fiat-formaggio")
+	ctx, span := tracer.Start(ctx, "Bot.sendSavingAccountsCommand")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.Int64("user.id", int64(userID)),
+		attribute.Int64("chat.id", chatID),
+	)
+
 	accounts, err := b.financeService.GetSavingAccountsByUserID(ctx, userID)
 	if err != nil {
 		log.Printf("Ошибка при получении накопительных счетов для пользователя %d: %v", userID, err)
@@ -22,11 +35,11 @@ func (b *Bot) sendSavingAccountsCommand(ctx context.Context, chatID int64, userI
 
 	text := "💰 Ваши накопительные счета:\n\n"
 	for i, account := range accounts {
-		amount := float64(account.AmountMinorUnits) / defaultMinorUnits
+		amount := float64(account.AmountMinorUnits) / DefaultMinorUnits
 		interestRate := float64(account.InterestRateBasisPoints) / 100.0
 
 		text += fmt.Sprintf("%d. %s\n", i+1, account.Name)
-		text += fmt.Sprintf("   💰 %s\n", formatAmount(amount, account.Currency.String()))
+		text += fmt.Sprintf("   💰 %s\n", FormatAmount(amount, account.Currency.String()))
 		
 		if interestRate > 0 {
 			text += fmt.Sprintf("   📈 %.2f%%/год\n", interestRate)
@@ -42,3 +55,4 @@ func (b *Bot) sendSavingAccountsCommand(ctx context.Context, chatID int64, userI
 
 	b.sendMessage(chatID, text)
 }
+

@@ -5,11 +5,22 @@ import (
 	"fmt"
 	"github.com/aniats/FiatFormaggio/internal/domain"
 	"log"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 )
 
-const defaultMinorUnits = 100.0
 
 func (b *Bot) sendDepositsCommand(ctx context.Context, chatID int64, userID domain.UserId) {
+	tracer := otel.Tracer("fiat-formaggio")
+	ctx, span := tracer.Start(ctx, "Bot.sendDepositsCommand")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.Int64("user.id", int64(userID)),
+		attribute.Int64("chat.id", chatID),
+	)
+
 	deposits, err := b.financeService.GetDepositsByUserID(ctx, userID)
 	if err != nil {
 		log.Printf("Ошибка при получении депозитов для пользователя %d: %v", userID, err)
@@ -24,11 +35,11 @@ func (b *Bot) sendDepositsCommand(ctx context.Context, chatID int64, userID doma
 
 	text := "🏦 Ваши депозиты:\n\n"
 	for i, deposit := range deposits {
-		amount := float64(deposit.AmountMinorUnits) / defaultMinorUnits
+		amount := float64(deposit.AmountMinorUnits) / DefaultMinorUnits
 		interestRate := float64(deposit.InterestRateBasisPoints) / 100.0
 
 		text += fmt.Sprintf("%d. %s\n", i+1, deposit.Name)
-		text += fmt.Sprintf("   💰 %s\n", formatAmount(amount, deposit.Currency.String()))
+		text += fmt.Sprintf("   💰 %s\n", FormatAmount(amount, deposit.Currency.String()))
 		text += fmt.Sprintf("   📈 %.2f%%/год\n", interestRate)
 
 		if deposit.ExpirationDate != nil {
@@ -42,15 +53,3 @@ func (b *Bot) sendDepositsCommand(ctx context.Context, chatID int64, userID doma
 	b.sendMessage(chatID, text)
 }
 
-func formatAmount(amount float64, currency string) string {
-	switch currency {
-	case "RUB":
-		return fmt.Sprintf("%.2f ₽", amount)
-	case "USD":
-		return fmt.Sprintf("$%.2f", amount)
-	case "EUR":
-		return fmt.Sprintf("€%.2f", amount)
-	default:
-		return fmt.Sprintf("%.2f %s", amount, currency)
-	}
-}

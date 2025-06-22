@@ -5,9 +5,19 @@ import (
 	"fmt"
 
 	"github.com/aniats/FiatFormaggio/internal/domain"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 func (b *Bot) sendCurrencyRatesCommand(ctx context.Context, chatID int64) {
+	tracer := otel.Tracer("fiat-formaggio")
+	ctx, span := tracer.Start(ctx, "Bot.sendCurrencyRatesCommand")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.Int64("chat.id", chatID),
+	)
+
 	rates, err := b.currencyService.GetCurrencyRates(ctx)
 	if err != nil {
 		b.sendMessage(chatID, "❌ Ошибка получения курсов валют. Попробуйте позже.")

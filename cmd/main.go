@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
+	"go.opentelemetry.io/otel"
 
 	"github.com/aniats/FiatFormaggio/internal/app"
 	"github.com/aniats/FiatFormaggio/internal/domain"
@@ -25,6 +26,12 @@ func main() {
 	if err := godotenv.Load(); err != nil {
 		log.Fatal("Error loading .env file")
 	}
+
+	tracingCleanup, err := app.InitTracing()
+	if err != nil {
+		log.Fatalf("Failed to initialize tracing: %v", err)
+	}
+	defer tracingCleanup()
 
 	repo, err := initRepository()
 	if err != nil {
@@ -61,6 +68,10 @@ func main() {
 }
 
 func initRepository() (repository.Repository, error) {
+	tracer := otel.Tracer("fiat-formaggio")
+	ctx, span := tracer.Start(context.Background(), "initRepository")
+	defer span.End()
+
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
 		return nil, fmt.Errorf("DATABASE_URL environment variable is required")
@@ -71,10 +82,10 @@ func initRepository() (repository.Repository, error) {
 		return nil, fmt.Errorf("failed to create repository: %w", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	healthCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	if err := repo.HealthCheck(ctx); err != nil {
+	if err := repo.HealthCheck(healthCtx); err != nil {
 		return nil, fmt.Errorf("repository health check failed: %w", err)
 	}
 
@@ -99,6 +110,10 @@ func initCurrencyService(repo repository.Repository, cbrService *cbr.CBRService)
 }
 
 func testServices(ctx context.Context, financeService *finance.FinanceService, currencyService *currency.CachedCurrencyService) error {
+	tracer := otel.Tracer("fiat-formaggio")
+	ctx, span := tracer.Start(ctx, "testServices")
+	defer span.End()
+
 	userID := domain.UserId(123456789)
 	deposits, err := financeService.GetDepositsByUserID(ctx, userID)
 	if err != nil {

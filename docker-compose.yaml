@@ -35,6 +35,20 @@ services:
       - fiat_network
     restart: "no"  # Run once and exit
 
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: fiat_formaggio_jaeger
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "14268:14268"  # Jaeger collector HTTP
+      - "14250:14250"  # Jaeger collector gRPC
+      - "4318:4318"    # OTLP HTTP receiver
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    networks:
+      - fiat_network
+    restart: unless-stopped
+
   app:
     build:
       context: .
@@ -43,11 +57,14 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      JAEGER_ENDPOINT: ${JAEGER_ENDPOINT}
     depends_on:
       postgres:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+      jaeger:
+        condition: service_started
     networks:
       - fiat_network
     restart: unless-stopped
