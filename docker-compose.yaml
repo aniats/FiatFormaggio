@@ -27,7 +27,7 @@ services:
       dockerfile: Dockerfile.migrate
     container_name: fiat_formaggio_migrate
     environment:
-      DATABASE_URL: ${DATABASE_URL}
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
     depends_on:
       postgres:
         condition: service_healthy

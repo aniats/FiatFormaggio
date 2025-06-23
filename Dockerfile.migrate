@@ -1,0 +1,29 @@
+FROM golang:1.24-alpine AS builder
+
+WORKDIR /app
+
+# Copy go mod files
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Build the migration binary
+RUN go build -o migrate cmd/migrate/main.go
+
+FROM alpine:latest
+
+# Install ca-certificates for HTTPS connections
+RUN apk --no-cache add ca-certificates
+
+WORKDIR /root/
+
+# Copy the migration binary
+COPY --from=builder /app/migrate .
+
+# Copy migration files
+COPY --from=builder /app/migrations ./migrations
+
+# Run migrations up by default
+CMD ["sh", "-c", "./migrate postgres \"$DATABASE_URL\" up"]
