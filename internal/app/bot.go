@@ -60,6 +60,7 @@ const (
 type BotAPI interface {
 	GetLastEvents() <-chan tgBotAPI.Update
 	SendMessage(chatID int64, text string) error
+	SetMyCommands(commands []tgBotAPI.BotCommand) error
 	Close()
 }
 
@@ -136,7 +137,15 @@ func NewBotFromToken(token string, financeService FinanceService, currencyServic
 		return nil, err
 	}
 
-	return NewBot(botAPI, financeService, currencyService), nil
+	bot := NewBot(botAPI, financeService, currencyService)
+	
+	// Set up bot commands in Telegram UI
+	if err := bot.setupBotCommands(); err != nil {
+		log.Printf("Failed to set bot commands: %v", err)
+		// Don't fail bot creation, just log the error
+	}
+
+	return bot, nil
 }
 
 func (b *Bot) Start(ctx context.Context) error {
@@ -354,4 +363,59 @@ func (wp *WorkerPool) worker(ctx context.Context, workerID int64) {
 			job.bot.handleMessage(job.ctx, job.message)
 		}
 	}
+}
+
+func (b *Bot) setupBotCommands() error {
+	commands := []tgBotAPI.BotCommand{
+		{
+			Command:     "start",
+			Description: "🏠 Начать работу с ботом",
+		},
+		{
+			Command:     "help",
+			Description: "❓ Показать справку по командам",
+		},
+		{
+			Command:     "total",
+			Description: "💰 Показать общий баланс",
+		},
+		{
+			Command:     "deposits",
+			Description: "💳 Показать депозиты",
+		},
+		{
+			Command:     "create_deposit",
+			Description: "➕ Добавить депозит",
+		},
+		{
+			Command:     "brokerage_accounts",
+			Description: "📈 Показать брокерские счета",
+		},
+		{
+			Command:     "create_brokerage_account",
+			Description: "➕ Добавить брокерский счет",
+		},
+		{
+			Command:     "saving_accounts",
+			Description: "🏦 Показать накопительные счета",
+		},
+		{
+			Command:     "create_saving_account",
+			Description: "➕ Добавить накопительный счет",
+		},
+		{
+			Command:     "cash_holdings",
+			Description: "💵 Показать наличные",
+		},
+		{
+			Command:     "create_cash_holding",
+			Description: "➕ Добавить наличные",
+		},
+		{
+			Command:     "rates",
+			Description: "💱 Курсы валют",
+		},
+	}
+
+	return b.botAPI.SetMyCommands(commands)
 }

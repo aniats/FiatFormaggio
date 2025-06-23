@@ -48,6 +48,12 @@ func (t *TelegramBotAPI) SendMessage(chatID int64, text string) error {
 	return err
 }
 
+func (t *TelegramBotAPI) SetMyCommands(commands []tgBotAPI.BotCommand) error {
+	commandsConfig := tgBotAPI.NewSetMyCommands(commands...)
+	_, err := t.api.Request(commandsConfig)
+	return err
+}
+
 func (t *TelegramBotAPI) Close() {
 	t.api.StopReceivingUpdates()
 	log.Println("Telegram Bot API connection closed")
