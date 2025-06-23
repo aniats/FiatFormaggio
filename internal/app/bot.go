@@ -10,10 +10,12 @@ import (
 
 	"github.com/aniats/FiatFormaggio/internal/domain"
 	"github.com/aniats/FiatFormaggio/internal/metrics"
+	"github.com/aniats/FiatFormaggio/internal/middleware"
 	"github.com/aniats/FiatFormaggio/internal/service/finance/models"
 	tgBotAPI "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -86,6 +88,7 @@ type Bot struct {
 	currencyService CurrencyService
 	workerPool      *WorkerPool
 	sessionManager  *UserSessionManager
+	interceptor     *middleware.UnifiedInterceptor
 }
 
 type WorkerPool struct {
@@ -115,19 +118,40 @@ func (m *Message) Command() string {
 	return command
 }
 
+// Implement interfaces for middleware
+func (m *Message) GetUserID() int64 {
+	return m.UserID
+}
+
+func (m *Message) GetChatID() int64 {
+	return m.ChatID
+}
+
+func (m *Message) GetCommand() string {
+	return m.Command()
+}
+
+func (m *Message) GetText() string {
+	return m.Text
+}
+
 type Job struct {
 	ctx     context.Context
 	message *Message
 	bot     *Bot
+	span    trace.Span
 }
 
 func NewBot(botAPI BotAPI, financeService FinanceService, currencyService CurrencyService) *Bot {
+	interceptor := middleware.NewUnifiedInterceptor(middleware.DefaultConfig("fiat-formaggio-bot"))
+	
 	return &Bot{
 		botAPI:          botAPI,
 		financeService:  financeService,
 		currencyService: currencyService,
 		workerPool:      NewWorkerPool(DefaultWorkerPoolSize),
 		sessionManager:  NewUserSessionManager(),
+		interceptor:     interceptor,
 	}
 }
 
@@ -173,10 +197,20 @@ func (b *Bot) Start(ctx context.Context) error {
 				Text:     update.Message.Text,
 			}
 
+			// Create a root span for this message processing
+			tracer := otel.Tracer("fiat-formaggio")
+			msgCtx, span := tracer.Start(ctx, "Bot.ProcessTelegramMessage")
+			span.SetAttributes(
+				attribute.Int64("user.id", msg.UserID),
+				attribute.Int64("chat.id", msg.ChatID),
+				attribute.String("message.text", msg.Text),
+			)
+
 			job := Job{
-				ctx:     ctx,
+				ctx:     msgCtx,
 				message: msg,
 				bot:     b,
+				span:    span, // Store span to end it after processing
 			}
 
 			select {
@@ -202,19 +236,26 @@ func (b *Bot) sendMessage(chatID int64, text string) {
 }
 
 func (b *Bot) handleMessage(ctx context.Context, message *Message) {
-	start := time.Now()
-	tracer := otel.Tracer("fiat-formaggio")
-	ctx, span := tracer.Start(ctx, "Bot.handleMessage")
-	defer func() {
-		span.End()
-		metrics.RecordRequest(string(CommandType(strings.ToLower(message.Command()))), time.Since(start))
-	}()
+	// Define the core message processing logic
+	handler := func(ctx context.Context, msg interface{}) error {
+		if message, ok := msg.(*Message); ok {
+			b.processMessage(ctx, message)
+		}
+		return nil
+	}
+	
+	// Wrap with unified middleware (tracing, metrics, profiling, recovery)
+	middlewareHandler := func(ctx context.Context, input interface{}) (interface{}, error) {
+		return nil, handler(ctx, input)
+	}
+	wrappedHandler := b.interceptor.Chain(middlewareHandler, "Bot.handleMessage")
+	_, err := wrappedHandler(ctx, message)
+	if err != nil {
+		log.Printf("Error processing message: %v", err)
+	}
+}
 
-	span.SetAttributes(
-		attribute.Int64("user.id", message.UserID),
-		attribute.Int64("chat.id", message.ChatID),
-		attribute.String("message.command", message.Command()),
-	)
+func (b *Bot) processMessage(ctx context.Context, message *Message) {
 
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -270,17 +311,23 @@ func (b *Bot) handleMessage(ctx context.Context, message *Message) {
 }
 
 func (b *Bot) startSession(ctx context.Context, msg *Message, sessionType SessionType) {
-	tracer := otel.Tracer("fiat-formaggio")
-	ctx, span := tracer.Start(ctx, "Bot.startSession")
-	defer span.End()
-
 	userID := domain.UserId(msg.UserID)
-	span.SetAttributes(
-		attribute.Int64("user.id", msg.UserID),
-		attribute.String("session.type", string(sessionType)),
-	)
 	chatID := msg.ChatID
+	
+	// Use unified interceptor for session operations
+	sessionHandler := func(ctx context.Context, input interface{}) (interface{}, error) {
+		b.createAndStartSession(ctx, userID, chatID, msg, sessionType)
+		return nil, nil
+	}
+	wrappedHandler := b.interceptor.Chain(sessionHandler, "Bot.startSession")
+	_, err := wrappedHandler(ctx, msg)
+	
+	if err != nil {
+		log.Printf("Error starting session: %v", err)
+	}
+}
 
+func (b *Bot) createAndStartSession(ctx context.Context, userID domain.UserId, chatID int64, msg *Message, sessionType SessionType) {
 	session, err := b.sessionManager.StartSession(userID, chatID, sessionType)
 	if err != nil {
 		b.sendMessage(chatID, fmt.Sprintf("❌ Не удалось начать сессию: %s", err.Error()))
@@ -296,17 +343,25 @@ func (b *Bot) startSession(ctx context.Context, msg *Message, sessionType Sessio
 }
 
 func (b *Bot) handleSessionMessage(ctx context.Context, msg *Message, session *UserSession) {
-	tracer := otel.Tracer("fiat-formaggio")
-	ctx, span := tracer.Start(ctx, "Bot.handleSessionMessage")
-	defer span.End()
+	// Create session message handler
+	handler := func(ctx context.Context, message interface{}) error {
+		b.sessionManager.UpdateLastActivity(session.UserID)
+		b.processSessionMessage(ctx, msg, session)
+		return nil
+	}
+	
+	// Use unified interceptor for session handling
+	middlewareHandler := func(ctx context.Context, input interface{}) (interface{}, error) {
+		return nil, handler(ctx, input)
+	}
+	wrappedHandler := b.interceptor.Chain(middlewareHandler, "Bot.handleSessionMessage")
+	_, err := wrappedHandler(ctx, msg)
+	if err != nil {
+		log.Printf("Error in session message: %v", err)
+	}
+}
 
-	span.SetAttributes(
-		attribute.Int64("user.id", int64(session.UserID)),
-		attribute.String("session.step", string(session.CurrentStep)),
-		attribute.String("session.type", string(session.Type)),
-	)
-
-	b.sessionManager.UpdateLastActivity(session.UserID)
+func (b *Bot) processSessionMessage(ctx context.Context, msg *Message, session *UserSession) {
 
 	if strings.ToLower(msg.Text) == "/cancel" || strings.ToLower(msg.Text) == "отмена" {
 		b.cancelSession(session.UserID, session.ChatID)
@@ -360,7 +415,9 @@ func (wp *WorkerPool) worker(ctx context.Context, workerID int64) {
 				return
 			}
 
+			// Process the message and end the span
 			job.bot.handleMessage(job.ctx, job.message)
+			job.span.End()
 		}
 	}
 }

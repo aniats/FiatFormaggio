@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/aniats/FiatFormaggio/internal/middleware"
 	"github.com/aniats/FiatFormaggio/internal/repository"
 	_ "github.com/lib/pq"
 )
 
 type Repository struct {
-	db *sql.DB
+	db          *middleware.ProfiledDB
+	interceptor *middleware.UnifiedInterceptor
 }
 
 func New(connString string) (*Repository, error) {
@@ -27,7 +29,14 @@ func New(connString string) (*Repository, error) {
 		return nil, fmt.Errorf("couldn't ping: %v", err)
 	}
 
-	return &Repository{db: db}, nil
+	// Create interceptor and wrap database with SQL profiling
+	interceptor := middleware.NewUnifiedInterceptor(middleware.DefaultConfig("Repository"))
+	profiledDB := middleware.ProfileDatabase(db, true, true, 10*time.Millisecond)
+
+	return &Repository{
+		db:          profiledDB,
+		interceptor: interceptor,
+	}, nil
 }
 
 func (repo *Repository) Close() error {

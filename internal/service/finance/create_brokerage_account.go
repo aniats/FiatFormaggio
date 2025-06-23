@@ -7,49 +7,51 @@ import (
 
 	"github.com/aniats/FiatFormaggio/internal/domain"
 	"github.com/aniats/FiatFormaggio/internal/service/finance/models"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
 )
 
 func (s *FinanceService) CreateBrokerageAccount(ctx context.Context, req *models.CreateBrokerageAccountRequest) (*domain.BrokerageAccount, error) {
-	tracer := otel.Tracer("fiat-formaggio")
-	ctx, span := tracer.Start(ctx, "FinanceService.CreateBrokerageAccount")
-	defer span.End()
+	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
+		if err := s.validateCreateBrokerageAccountRequest(req); err != nil {
+			return nil, fmt.Errorf("validation failed: %w", err)
+		}
 
-	if req != nil {
-		span.SetAttributes(attribute.Int64("user.id", int64(req.UserID)))
+		currency, err := s.validateAndNormalizeCurrency(req.Currency)
+		if err != nil {
+			return nil, fmt.Errorf("invalid currency: %w", err)
+		}
+
+		accountType, err := s.parseBrokerageType(req.AccountType)
+		if err != nil {
+			return nil, fmt.Errorf("invalid account type: %w", err)
+		}
+
+		amountMinorUnits := int64(req.AmountRUB * 100)
+
+		account := &domain.BrokerageAccount{
+			UserId:           req.UserID,
+			Name:             strings.TrimSpace(req.Name),
+			AmountMinorUnits: amountMinorUnits,
+			Currency:         currency,
+			Broker:           req.Broker,
+			AccountType:      accountType,
+		}
+
+		if err := s.repo.CreateBrokerageAccount(ctx, account); err != nil {
+			return nil, fmt.Errorf("failed to create brokerage account: %w", err)
+		}
+
+		return account, nil
 	}
 
-	if err := s.validateCreateBrokerageAccountRequest(req); err != nil {
-		return nil, fmt.Errorf("validation failed: %w", err)
-	}
-
-	currency, err := s.validateAndNormalizeCurrency(req.Currency)
+	wrappedHandler := s.interceptor.Chain(handler, "FinanceService.CreateBrokerageAccount")
+	resultInterface, err := wrappedHandler(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("invalid currency: %w", err)
+		return nil, err
 	}
-
-	accountType, err := s.parseBrokerageType(req.AccountType)
-	if err != nil {
-		return nil, fmt.Errorf("invalid account type: %w", err)
+	if resultInterface != nil {
+		return resultInterface.(*domain.BrokerageAccount), nil
 	}
-
-	amountMinorUnits := int64(req.AmountRUB * 100)
-
-	account := &domain.BrokerageAccount{
-		UserId:           req.UserID,
-		Name:             strings.TrimSpace(req.Name),
-		AmountMinorUnits: amountMinorUnits,
-		Currency:         currency,
-		Broker:           req.Broker,
-		AccountType:      accountType,
-	}
-
-	if err := s.repo.CreateBrokerageAccount(ctx, account); err != nil {
-		return nil, fmt.Errorf("failed to create brokerage account: %w", err)
-	}
-
-	return account, nil
+	return nil, nil
 }
 
 func (s *FinanceService) validateCreateBrokerageAccountRequest(req *models.CreateBrokerageAccountRequest) error {

@@ -8,7 +8,6 @@ import (
 
 	"github.com/aniats/FiatFormaggio/internal/domain"
 	"github.com/aniats/FiatFormaggio/internal/service/finance/models"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 )
 
@@ -24,46 +23,61 @@ const (
 )
 
 func (s *FinanceService) CreateDeposit(ctx context.Context, req *models.CreateDepositRequest) (*domain.Deposit, error) {
-	tracer := otel.Tracer("fiat-formaggio")
-	ctx, span := tracer.Start(ctx, "FinanceService.CreateDeposit")
-	defer span.End()
-
+	var result *domain.Deposit
+	var err error
+	
+	// Use the universal wrapper for clean tracing
+	attrs := []attribute.KeyValue{}
 	if req != nil {
-		span.SetAttributes(attribute.Int64("user.id", int64(req.UserID)))
+		attrs = append(attrs, attribute.Int64("user.id", int64(req.UserID)))
 	}
+	
+	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
+		if err = s.validateCreateDepositRequest(req); err != nil {
+			return nil, fmt.Errorf("validation failed: %w", err)
+		}
 
-	if err := s.validateCreateDepositRequest(req); err != nil {
-		return nil, fmt.Errorf("validation failed: %w", err)
+		currency, currErr := s.validateAndNormalizeCurrency(req.Currency)
+		if currErr != nil {
+			return nil, fmt.Errorf("currency validation failed: %w", currErr)
+		}
+
+		// TODO: go to db to calc
+		amountMinorUnits := int64(req.AmountRUB * 100)
+
+		var interestRateBasisPoints int64
+		if req.InterestRatePercent != nil {
+			basisPoints := int64(*req.InterestRatePercent * 100)
+			interestRateBasisPoints = basisPoints
+		}
+
+		deposit := &domain.Deposit{
+			UserId:                  req.UserID,
+			Name:                    req.Name,
+			AmountMinorUnits:        amountMinorUnits,
+			InterestRateBasisPoints: interestRateBasisPoints,
+			ExpirationDate:          req.ExpirationDate,
+			Currency:                currency,
+		}
+
+		if repoErr := s.repo.CreateDeposit(ctx, deposit); repoErr != nil {
+			return nil, fmt.Errorf("failed to create deposit in repository: %w", repoErr)
+		}
+
+		return deposit, nil
 	}
-
-	currency, err := s.validateAndNormalizeCurrency(req.Currency)
+	
+	wrappedHandler := s.interceptor.Chain(handler, "FinanceService.CreateDeposit")
+	resultInterface, err := wrappedHandler(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("currency validation failed: %w", err)
+		return nil, err
 	}
-
-	// TODO: go to db to calc
-	amountMinorUnits := int64(req.AmountRUB * 100)
-
-	var interestRateBasisPoints int64
-	if req.InterestRatePercent != nil {
-		basisPoints := int64(*req.InterestRatePercent * 100)
-		interestRateBasisPoints = basisPoints
+	
+	if resultInterface != nil {
+		result = resultInterface.(*domain.Deposit)
 	}
-
-	deposit := &domain.Deposit{
-		UserId:                  req.UserID,
-		Name:                    req.Name,
-		AmountMinorUnits:        amountMinorUnits,
-		InterestRateBasisPoints: interestRateBasisPoints,
-		ExpirationDate:          req.ExpirationDate,
-		Currency:                currency,
-	}
-
-	if err := s.repo.CreateDeposit(ctx, deposit); err != nil {
-		return nil, fmt.Errorf("failed to create deposit in repository: %w", err)
-	}
-
-	return deposit, nil
+	
+	return result, err
 }
 
 func (s *FinanceService) validateAndNormalizeCurrency(currencyInput string) (domain.CurrencyName, error) {

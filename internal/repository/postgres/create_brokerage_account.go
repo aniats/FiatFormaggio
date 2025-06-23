@@ -7,30 +7,36 @@ import (
 )
 
 func (repo *Repository) CreateBrokerageAccount(ctx context.Context, account *domain.BrokerageAccount) error {
-	query := `
-        INSERT INTO brokerage_accounts (
-            user_id, 
-            name, 
-            amount_minor_units, 
-            currency, 
-            broker_name, 
-            account_type
-        ) VALUES ($1, $2, $3, $4, $5, $6)`
+	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
+		query := `
+			INSERT INTO brokerage_accounts (
+				user_id, 
+				name, 
+				amount_minor_units, 
+				currency, 
+				broker_name, 
+				account_type
+			) VALUES ($1, $2, $3, $4, $5, $6)`
 
-	_, err := repo.db.ExecContext(
-		ctx,
-		query,
-		account.UserId,
-		account.Name,
-		account.AmountMinorUnits,
-		account.Currency,
-		account.Broker,
-		account.AccountType,
-	)
+		_, err := repo.db.ExecContext(
+			ctx,
+			query,
+			account.UserId,
+			account.Name,
+			account.AmountMinorUnits,
+			account.Currency,
+			account.Broker,
+			account.AccountType,
+		)
 
-	if err != nil {
-		return fmt.Errorf("failed to create brokerage account: %w", err)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create brokerage account: %w", err)
+		}
+
+		return nil, nil
 	}
 
-	return nil
+	wrappedHandler := repo.interceptor.Chain(handler, "Repository.CreateBrokerageAccount")
+	_, err := wrappedHandler(ctx, account)
+	return err
 }

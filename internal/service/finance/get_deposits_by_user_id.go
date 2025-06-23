@@ -4,20 +4,27 @@ import (
 	"context"
 
 	"github.com/aniats/FiatFormaggio/internal/domain"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
 )
 
 func (s *FinanceService) GetDepositsByUserID(ctx context.Context, userId domain.UserId) ([]domain.Deposit, error) {
-	tracer := otel.Tracer("fiat-formaggio")
-	ctx, span := tracer.Start(ctx, "FinanceService.GetDepositsByUserID")
-	defer span.End()
-
-	span.SetAttributes(attribute.Int64("user.id", int64(userId)))
-
-	result, err := s.repo.GetDepositsByUserID(ctx, userId)
+	var result []domain.Deposit
+	var err error
+	
+	// Use the unified interceptor for clean tracing
+	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
+		deposits, repoErr := s.repo.GetDepositsByUserID(ctx, userId)
+		return deposits, repoErr
+	}
+	
+	wrappedHandler := s.interceptor.Chain(handler, "FinanceService.GetDepositsByUserID")
+	resultInterface, err := wrappedHandler(ctx, userId)
 	if err != nil {
 		return nil, err
 	}
-	return result, nil
+	
+	if resultInterface != nil {
+		result = resultInterface.([]domain.Deposit)
+	}
+	
+	return result, err
 }

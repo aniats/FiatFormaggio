@@ -5,32 +5,40 @@ import (
 	"fmt"
 	"github.com/aniats/FiatFormaggio/internal/domain"
 	"log"
-
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
 )
 
 
 func (b *Bot) sendDepositsCommand(ctx context.Context, chatID int64, userID domain.UserId) {
-	tracer := otel.Tracer("fiat-formaggio")
-	ctx, span := tracer.Start(ctx, "Bot.sendDepositsCommand")
-	defer span.End()
+	// Use unified interceptor for tracing and middleware
+	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
+		params := input.(map[string]interface{})
+		chatID := params["chatID"].(int64)
+		userID := params["userID"].(domain.UserId)
+		
+		return b.processDepositsCommand(ctx, chatID, userID)
+	}
+	
+	params := map[string]interface{}{
+		"chatID": chatID,
+		"userID": userID,
+	}
+	
+	wrappedHandler := b.interceptor.Chain(handler, "Bot.sendDepositsCommand")
+	_, _ = wrappedHandler(ctx, params)
+}
 
-	span.SetAttributes(
-		attribute.Int64("user.id", int64(userID)),
-		attribute.Int64("chat.id", chatID),
-	)
+func (b *Bot) processDepositsCommand(ctx context.Context, chatID int64, userID domain.UserId) (interface{}, error) {
 
 	deposits, err := b.financeService.GetDepositsByUserID(ctx, userID)
 	if err != nil {
 		log.Printf("Ошибка при получении депозитов для пользователя %d: %v", userID, err)
 		b.sendMessage(chatID, "❌ Ошибка при получении депозитов. Попробуйте позже.")
-		return
+		return nil, err
 	}
 
 	if len(deposits) == 0 {
 		b.sendMessage(chatID, "📭 У вас пока нет сохраненных депозитов.\n\nСоздайте первый депозит: /create_deposit")
-		return
+		return nil, nil
 	}
 
 	text := "🏦 Ваши депозиты:\n\n"
@@ -51,5 +59,6 @@ func (b *Bot) sendDepositsCommand(ctx context.Context, chatID int64, userID doma
 	text += fmt.Sprintf("📊 Всего депозитов: %d", len(deposits))
 
 	b.sendMessage(chatID, text)
+	return nil, nil
 }
 

@@ -7,42 +7,45 @@ import (
 
 	"github.com/aniats/FiatFormaggio/internal/domain"
 	"github.com/aniats/FiatFormaggio/internal/service/finance/models"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
 )
 
 func (s *FinanceService) CreateCashHolding(ctx context.Context, req *models.CreateCashHoldingRequest) (*domain.CashHolding, error) {
-	tracer := otel.Tracer("fiat-formaggio")
-	ctx, span := tracer.Start(ctx, "FinanceService.CreateCashHolding")
-	defer span.End()
+	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
+		if err := s.validateCreateCashHoldingRequest(req); err != nil {
+			return nil, fmt.Errorf("validation failed: %w", err)
+		}
 
-	if req != nil {
-		span.SetAttributes(attribute.Int64("user.id", int64(req.UserID)))
+		currency, err := s.validateAndNormalizeCurrency(req.Currency)
+		if err != nil {
+			return nil, fmt.Errorf("invalid currency: %w", err)
+		}
+
+		amountMinorUnits := int64(req.AmountRUB * 100)
+
+		cashHolding := &domain.CashHolding{
+			UserId:           req.UserID,
+			Name:             strings.TrimSpace(req.Name),
+			AmountMinorUnits: amountMinorUnits,
+			Currency:         currency,
+		}
+
+		if err := s.repo.CreateCashHolding(ctx, cashHolding); err != nil {
+			return nil, fmt.Errorf("failed to create cash holding: %w", err)
+		}
+
+		return cashHolding, nil
 	}
 
-	if err := s.validateCreateCashHoldingRequest(req); err != nil {
-		return nil, fmt.Errorf("validation failed: %w", err)
-	}
-
-	currency, err := s.validateAndNormalizeCurrency(req.Currency)
+	wrappedHandler := s.interceptor.Chain(handler, "FinanceService.CreateCashHolding")
+	resultInterface, err := wrappedHandler(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("invalid currency: %w", err)
+		return nil, err
 	}
 
-	amountMinorUnits := int64(req.AmountRUB * 100)
-
-	cashHolding := &domain.CashHolding{
-		UserId:           req.UserID,
-		Name:             strings.TrimSpace(req.Name),
-		AmountMinorUnits: amountMinorUnits,
-		Currency:         currency,
+	if resultInterface != nil {
+		return resultInterface.(*domain.CashHolding), nil
 	}
-
-	if err := s.repo.CreateCashHolding(ctx, cashHolding); err != nil {
-		return nil, fmt.Errorf("failed to create cash holding: %w", err)
-	}
-
-	return cashHolding, nil
+	return nil, nil
 }
 
 func (s *FinanceService) validateCreateCashHoldingRequest(req *models.CreateCashHoldingRequest) error {

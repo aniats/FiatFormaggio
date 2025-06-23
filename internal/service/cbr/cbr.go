@@ -10,17 +10,21 @@ import (
 	"time"
 
 	"github.com/aniats/FiatFormaggio/internal/domain"
+	"github.com/aniats/FiatFormaggio/internal/middleware"
 	"golang.org/x/net/html/charset"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
 )
 
 type CBRService struct {
-	client *http.Client
+	client      *http.Client
+	interceptor *middleware.UnifiedInterceptor
 }
 
 func NewCBRService(client *http.Client) *CBRService {
-	return &CBRService{client: client}
+	interceptor := middleware.NewUnifiedInterceptor(middleware.DefaultConfig("CBRService"))
+	return &CBRService{
+		client:      client,
+		interceptor: interceptor,
+	}
 }
 
 type ValCurs struct {
@@ -41,69 +45,79 @@ type Valute struct {
 }
 
 func (s *CBRService) GetCurrencyRates(ctx context.Context, date time.Time) ([]*domain.CurrencyRateCBR, error) {
-	tracer := otel.Tracer("fiat-formaggio")
-	ctx, span := tracer.Start(ctx, "CBRService.GetCurrencyRates")
-	defer span.End()
+	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
+		resp, err := s.fetchCBRData(ctx, date)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
 
-	span.SetAttributes(
-		attribute.String("cbr.date", date.Format("2006-01-02")),
-	)
+		decoder := xml.NewDecoder(resp.Body)
+		decoder.CharsetReader = charset.NewReaderLabel
 
-	resp, err := s.fetchCBRData(ctx, date)
+		var valCurs ValCurs
+		if err := decoder.Decode(&valCurs); err != nil {
+			return nil, fmt.Errorf("failed to decode XML: %w", err)
+		}
+
+		rates := make([]*domain.CurrencyRateCBR, 0, len(valCurs.Valutes))
+		for _, valute := range valCurs.Valutes {
+			rate, err := s.parseValuteToRate(valute)
+			if err != nil {
+				continue
+			}
+			rates = append(rates, rate)
+		}
+
+		return rates, nil
+	}
+
+	wrappedHandler := s.interceptor.Chain(handler, "CBRService.GetCurrencyRates")
+	resultInterface, err := wrappedHandler(ctx, date)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
 
-	decoder := xml.NewDecoder(resp.Body)
-	decoder.CharsetReader = charset.NewReaderLabel
-
-	var valCurs ValCurs
-	if err := decoder.Decode(&valCurs); err != nil {
-		return nil, fmt.Errorf("failed to decode XML: %w", err)
+	if resultInterface != nil {
+		return resultInterface.([]*domain.CurrencyRateCBR), nil
 	}
-
-	rates := make([]*domain.CurrencyRateCBR, 0, len(valCurs.Valutes))
-	for _, valute := range valCurs.Valutes {
-		rate, err := s.parseValuteToRate(valute)
-		if err != nil {
-			continue
-		}
-		rates = append(rates, rate)
-	}
-
-	return rates, nil
+	return nil, nil
 }
 
 func (s *CBRService) fetchCBRData(ctx context.Context, date time.Time) (*http.Response, error) {
-	tracer := otel.Tracer("fiat-formaggio")
-	ctx, span := tracer.Start(ctx, "CBRService.fetchCBRData")
-	defer span.End()
+	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
+		url := fmt.Sprintf("https://www.cbr.ru/scripts/XML_daily.asp?date_req=%s", date.Format("02/01/2006"))
 
-	url := fmt.Sprintf("https://www.cbr.ru/scripts/XML_daily.asp?date_req=%s", date.Format("02/01/2006"))
-	span.SetAttributes(
-		attribute.String("http.url", url),
-		attribute.String("cbr.date", date.Format("2006-01-02")),
-	)
+		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+		if err != nil {
+			return nil, fmt.Errorf("error creating request: %w", err)
+		}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+		req.Header.Set("User-Agent", "Mozilla/5.0")
+
+		resp, err := s.client.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("request failed: %w", err)
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		}
+
+		return resp, nil
+	}
+
+	wrappedHandler := s.interceptor.Chain(handler, "CBRService.fetchCBRData")
+	resultInterface, err := wrappedHandler(ctx, date)
 	if err != nil {
-		return nil, fmt.Errorf("error creating request: %w", err)
+		return nil, err
 	}
 
-	req.Header.Set("User-Agent", "Mozilla/5.0")
-
-	resp, err := s.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
+	if resultInterface != nil {
+		return resultInterface.(*http.Response), nil
 	}
-
-	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
-
-	return resp, nil
+	return nil, nil
 }
 
 func (s *CBRService) parseValuteToRate(valute Valute) (*domain.CurrencyRateCBR, error) {

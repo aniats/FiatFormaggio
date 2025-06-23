@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/aniats/FiatFormaggio/internal/domain"
+	"github.com/aniats/FiatFormaggio/internal/middleware"
 	"github.com/aniats/FiatFormaggio/internal/repository"
-	"go.opentelemetry.io/otel"
 )
 
 const (
@@ -29,6 +29,7 @@ type CachedCurrencyService struct {
 	mu              sync.RWMutex
 	stopChan        chan struct{}
 	updateTicker    *time.Ticker
+	interceptor     *middleware.UnifiedInterceptor
 }
 
 func NewCachedCurrencyService(
@@ -39,6 +40,7 @@ func NewCachedCurrencyService(
 		repo:            repo,
 		externalService: externalService,
 		stopChan:        make(chan struct{}),
+		interceptor:     middleware.NewUnifiedInterceptor(middleware.DefaultConfig("CurrencyService")),
 	}
 }
 
@@ -63,33 +65,46 @@ func (s *CachedCurrencyService) Stop() {
 }
 
 func (s *CachedCurrencyService) GetCurrencyRates(ctx context.Context) ([]domain.CurrencyRate, error) {
-	tracer := otel.Tracer("fiat-formaggio")
-	ctx, span := tracer.Start(ctx, "CachedCurrencyService.GetCurrencyRates")
-	defer span.End()
-
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	rates, err := s.repo.GetCurrencyRates(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get cached currency rates: %w", err)
-	}
-
-	if len(rates) == 0 {
-		s.mu.RUnlock()
-		if err := s.updateCurrencyRates(ctx); err != nil {
-			s.mu.RLock()
-			return nil, fmt.Errorf("no cached rates and update failed: %w", err)
-		}
+	var result []domain.CurrencyRate
+	var err error
+	
+	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
 		s.mu.RLock()
+		defer s.mu.RUnlock()
 
-		rates, err = s.repo.GetCurrencyRates(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get currency rates after update: %w", err)
+		rates, repoErr := s.repo.GetCurrencyRates(ctx)
+		if repoErr != nil {
+			return nil, fmt.Errorf("failed to get cached currency rates: %w", repoErr)
 		}
-	}
 
-	return rates, nil
+		if len(rates) == 0 {
+			s.mu.RUnlock()
+			if updateErr := s.updateCurrencyRates(ctx); updateErr != nil {
+				s.mu.RLock()
+				return nil, fmt.Errorf("no cached rates and update failed: %w", updateErr)
+			}
+			s.mu.RLock()
+
+			rates, repoErr = s.repo.GetCurrencyRates(ctx)
+			if repoErr != nil {
+				return nil, fmt.Errorf("failed to get currency rates after update: %w", repoErr)
+			}
+		}
+
+		return rates, nil
+	}
+	
+	wrappedHandler := s.interceptor.Chain(handler, "CachedCurrencyService.GetCurrencyRates")
+	resultInterface, err := wrappedHandler(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	
+	if resultInterface != nil {
+		result = resultInterface.([]domain.CurrencyRate)
+	}
+	
+	return result, err
 }
 
 func (s *CachedCurrencyService) ForceUpdate(ctx context.Context) error {

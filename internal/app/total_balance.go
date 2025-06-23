@@ -7,24 +7,33 @@ import (
 	"strings"
 
 	"github.com/aniats/FiatFormaggio/internal/domain"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
 )
 
 func (b *Bot) sendTotalBalanceCommand(ctx context.Context, chatID int64, userID domain.UserId) {
-	tracer := otel.Tracer("fiat-formaggio")
-	ctx, span := tracer.Start(ctx, "Bot.sendTotalBalanceCommand")
-	defer span.End()
+	// Use unified interceptor for tracing and middleware
+	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
+		params := input.(map[string]interface{})
+		chatID := params["chatID"].(int64)
+		userID := params["userID"].(domain.UserId)
+		
+		return b.processTotalBalanceCommand(ctx, chatID, userID)
+	}
+	
+	params := map[string]interface{}{
+		"chatID": chatID,
+		"userID": userID,
+	}
+	
+	wrappedHandler := b.interceptor.Chain(handler, "Bot.sendTotalBalanceCommand")
+	_, _ = wrappedHandler(ctx, params)
+}
 
-	span.SetAttributes(
-		attribute.Int64("user.id", int64(userID)),
-		attribute.Int64("chat.id", chatID),
-	)
+func (b *Bot) processTotalBalanceCommand(ctx context.Context, chatID int64, userID domain.UserId) (interface{}, error) {
 
 	rates, err := b.currencyService.GetCurrencyRates(ctx)
 	if err != nil {
 		b.sendMessage(chatID, "❌ Ошибка получения курсов валют. Попробуйте позже.")
-		return
+		return nil, err
 	}
 
 	exchangeRates := buildExchangeRateMap(rates)
@@ -82,6 +91,7 @@ func (b *Bot) sendTotalBalanceCommand(ctx context.Context, chatID int64, userID 
 
 	message += fmt.Sprintf("🎯 ИТОГО: %s ₽\n", formatNumber(grandTotalRUB))
 	b.sendMessage(chatID, message)
+	return nil, nil
 }
 
 func buildExchangeRateMap(rates []domain.CurrencyRate) map[domain.CurrencyName]float64 {

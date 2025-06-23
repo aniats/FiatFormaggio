@@ -49,6 +49,8 @@ func main() {
 	cbrService := initCBRService()
 	currencyService := initCurrencyService(repo, cbrService)
 	financeService := finance.NewFinanceService(repo, currencyService)
+	
+	log.Println("✅ All services initialized with unified middleware support")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

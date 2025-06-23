@@ -5,25 +5,29 @@ import (
 	"fmt"
 
 	"github.com/aniats/FiatFormaggio/internal/domain"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
 )
 
 func (s *FinanceService) GetSavingAccountsByUserID(ctx context.Context, userID domain.UserId) ([]domain.SavingAccount, error) {
-	tracer := otel.Tracer("fiat-formaggio")
-	ctx, span := tracer.Start(ctx, "FinanceService.GetSavingAccountsByUserID")
-	defer span.End()
+	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
+		if userID <= 0 {
+			return nil, fmt.Errorf("invalid user ID: %d", userID)
+		}
 
-	span.SetAttributes(attribute.Int64("user.id", int64(userID)))
+		accounts, err := s.repo.GetSavingAccountsByUserID(ctx, userID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get saving accounts for user %d: %w", userID, err)
+		}
 
-	if userID <= 0 {
-		return nil, fmt.Errorf("invalid user ID: %d", userID)
+		return accounts, nil
 	}
 
-	accounts, err := s.repo.GetSavingAccountsByUserID(ctx, userID)
+	wrappedHandler := s.interceptor.Chain(handler, "FinanceService.GetSavingAccountsByUserID")
+	resultInterface, err := wrappedHandler(ctx, userID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get saving accounts for user %d: %w", userID, err)
+		return nil, err
 	}
-
-	return accounts, nil
+	if resultInterface != nil {
+		return resultInterface.([]domain.SavingAccount), nil
+	}
+	return nil, nil
 }
