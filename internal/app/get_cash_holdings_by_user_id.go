@@ -23,7 +23,7 @@ func (b *Bot) sendCashHoldingsCommand(ctx context.Context, chatID int64, userID 
 
 	holdings, err := b.financeService.GetCashHoldingsByUserID(ctx, userID)
 	if err != nil {
-		log.Printf("Ошибка при получении наличных счетов для пользователя %d: %v", userID, err)
+		log.Printf("Ошибка при получении наличных счетов для пользователя %s: %v", FormatInteger(int64(userID)), err)
 		b.sendMessage(chatID, "❌ Ошибка при получении наличных счетов. Попробуйте позже.")
 		return
 	}
@@ -42,7 +42,7 @@ func (b *Bot) sendCashHoldingsCommand(ctx context.Context, chatID int64, userID 
 		text += "\n"
 	}
 
-	text += fmt.Sprintf("📊 Всего счетов: %d", len(holdings))
+	text += fmt.Sprintf("📊 Всего счетов: %s", FormatInteger(int64(len(holdings))))
 
 	b.sendMessage(chatID, text)
 }

@@ -105,14 +105,14 @@ func (h *SavingAccountCreationHandler) handleAmount(bot *Bot, session *UserSessi
 	}
 
 	if amount > 1000000000 {
-		bot.sendMessage(session.ChatID, "❌ Слишком большая сумма (максимум 1,000,000,000). Попробуйте еще раз:")
+		bot.sendMessage(session.ChatID, fmt.Sprintf("❌ Слишком большая сумма (максимум %s). Попробуйте еще раз:", FormatInteger(1000000000)))
 		return nil
 	}
 
 	session.SetData("amount", amount)
 	session.CurrentStep = StepCurrency
 
-	text := fmt.Sprintf(`✅ Сумма: %.2f
+	text := fmt.Sprintf(`✅ Сумма: %s
 
 	Шаг 3/6: Выберите валюту счета
 	Доступные варианты:
@@ -122,7 +122,7 @@ func (h *SavingAccountCreationHandler) handleAmount(bot *Bot, session *UserSessi
 	• CNY, юань - Китайский юань ¥
 	• GBP, фунт - Британский фунт £
 	
-	По умолчанию: RUB (введите "пропустить" для RUB)`, amount)
+	По умолчанию: RUB (введите "пропустить" для RUB)`, FormatNumber(amount))
 
 	bot.sendMessage(session.ChatID, text)
 	return nil
@@ -213,7 +213,7 @@ func (h *SavingAccountCreationHandler) sendExpirationDatePrompt(bot *Bot, sessio
 	if rateData != nil {
 		rate := rateData.(*float64)
 		if rate != nil {
-			rateText = fmt.Sprintf("%.2f%%", *rate)
+			rateText = fmt.Sprintf("%s%%", FormatRate(*rate))
 		}
 	}
 
@@ -295,7 +295,7 @@ func (h *SavingAccountCreationHandler) sendConfirmation(bot *Bot, session *UserS
 	if rateData != nil {
 		rate := rateData.(*float64)
 		if rate != nil {
-			rateText = fmt.Sprintf("%.2f%%", *rate)
+			rateText = fmt.Sprintf("%s%%", FormatRate(*rate))
 		}
 	}
 
@@ -386,7 +386,7 @@ func (h *SavingAccountCreationHandler) CompleteSession(ctx context.Context, bot 
 
 	rateText := "Не указана"
 	if interestRate != nil {
-		rateText = fmt.Sprintf("%.2f%%", *interestRate)
+		rateText = fmt.Sprintf("%s%%", FormatRate(*interestRate))
 	}
 
 	dateText := "Не указана"

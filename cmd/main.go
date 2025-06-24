@@ -3,9 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/aniats/FiatFormaggio/internal/service/cbr"
-	"github.com/aniats/FiatFormaggio/internal/service/currency"
-	"github.com/aniats/FiatFormaggio/internal/service/finance"
 	"log"
 	"net/http"
 	"os"
@@ -13,16 +10,19 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/joho/godotenv"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"go.opentelemetry.io/otel"
-	_ "net/http/pprof"
-
 	"github.com/aniats/FiatFormaggio/internal/app"
 	"github.com/aniats/FiatFormaggio/internal/domain"
 	"github.com/aniats/FiatFormaggio/internal/metrics"
 	"github.com/aniats/FiatFormaggio/internal/repository"
 	"github.com/aniats/FiatFormaggio/internal/repository/postgres"
+	"github.com/aniats/FiatFormaggio/internal/service/cbr"
+	"github.com/aniats/FiatFormaggio/internal/service/currency"
+	"github.com/aniats/FiatFormaggio/internal/service/finance"
+
+	"github.com/joho/godotenv"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/otel"
+	_ "net/http/pprof"
 )
 
 func main() {
@@ -127,13 +127,13 @@ func testServices(ctx context.Context, financeService *finance.FinanceService, c
 	if err != nil {
 		return fmt.Errorf("failed to get deposits: %w", err)
 	}
-	log.Printf("Successfully retrieved %d deposits for user %d", len(deposits), userID)
+	log.Printf("Successfully retrieved %s deposits for user %s", app.FormatInteger(int64(len(deposits))), app.FormatInteger(int64(userID)))
 
 	rates, err := currencyService.GetCurrencyRates(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get currency rates: %w", err)
 	}
-	log.Printf("Successfully retrieved cached currency rates: %d currencies", len(rates))
+	log.Printf("Successfully retrieved cached currency rates: %s currencies", app.FormatInteger(int64(len(rates))))
 
 	return nil
 }

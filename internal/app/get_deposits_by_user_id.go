@@ -31,7 +31,7 @@ func (b *Bot) processDepositsCommand(ctx context.Context, chatID int64, userID d
 
 	deposits, err := b.financeService.GetDepositsByUserID(ctx, userID)
 	if err != nil {
-		log.Printf("Ошибка при получении депозитов для пользователя %d: %v", userID, err)
+		log.Printf("Ошибка при получении депозитов для пользователя %s: %v", FormatInteger(int64(userID)), err)
 		b.sendMessage(chatID, "❌ Ошибка при получении депозитов. Попробуйте позже.")
 		return nil, err
 	}
@@ -48,7 +48,7 @@ func (b *Bot) processDepositsCommand(ctx context.Context, chatID int64, userID d
 
 		text += fmt.Sprintf("%d. %s\n", i+1, deposit.Name)
 		text += fmt.Sprintf("   💰 %s\n", FormatAmount(amount, deposit.Currency.String()))
-		text += fmt.Sprintf("   📈 %.2f%%/год\n", interestRate)
+		text += fmt.Sprintf("   📈 %s%%/год\n", FormatNumber(interestRate))
 
 		if deposit.ExpirationDate != nil {
 			text += fmt.Sprintf("   📅 До: %s\n", deposit.ExpirationDate.Format("02.01.2006"))
@@ -56,7 +56,7 @@ func (b *Bot) processDepositsCommand(ctx context.Context, chatID int64, userID d
 		text += "\n"
 	}
 
-	text += fmt.Sprintf("📊 Всего депозитов: %d", len(deposits))
+	text += fmt.Sprintf("📊 Всего депозитов: %s", FormatInteger(int64(len(deposits))))
 
 	b.sendMessage(chatID, text)
 	return nil, nil

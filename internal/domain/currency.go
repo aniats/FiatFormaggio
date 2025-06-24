@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -181,10 +182,39 @@ func CurrencyFromHuman(human string) (CurrencyName, error) {
 	return "", fmt.Errorf("неизвестная валюта: %s", human)
 }
 
+// formatNumberWithCommas adds comma separators to numbers
+func formatNumberWithCommas(num float64) string {
+	str := strconv.FormatFloat(num, 'f', 2, 64)
+	
+	parts := strings.Split(str, ".")
+	integerPart := parts[0]
+	decimalPart := parts[1]
+	
+	if len(integerPart) > 3 {
+		var result strings.Builder
+		for i, digit := range integerPart {
+			if i > 0 && (len(integerPart)-i)%3 == 0 {
+				result.WriteString(",")
+			}
+			result.WriteRune(digit)
+		}
+		integerPart = result.String()
+	}
+	
+	decimalPart = strings.TrimRight(decimalPart, "0")
+	
+	if decimalPart == "" {
+		return integerPart
+	}
+	return integerPart + "." + decimalPart
+}
+
 func (c CurrencyName) FormatAmount(amount float64) string {
-	return fmt.Sprintf("%.2f %s (%s)", amount, c.Symbol(), c.ToHuman())
+	formattedAmount := formatNumberWithCommas(amount)
+	return fmt.Sprintf("%s %s (%s)", formattedAmount, c.Symbol(), c.ToHuman())
 }
 
 func (c CurrencyName) FormatAmountRussian(amount float64) string {
-	return fmt.Sprintf("%.2f %s (%s)", amount, c.Symbol(), c.ToHumanRussian())
+	formattedAmount := formatNumberWithCommas(amount)
+	return fmt.Sprintf("%s %s (%s)", formattedAmount, c.Symbol(), c.ToHumanRussian())
 }

@@ -23,7 +23,7 @@ func (b *Bot) sendBrokerageAccountsCommand(ctx context.Context, chatID int64, us
 
 	accounts, err := b.financeService.GetBrokerageAccountsByUserID(ctx, userID)
 	if err != nil {
-		log.Printf("Ошибка при получении брокерских счетов для пользователя %d: %v", userID, err)
+		log.Printf("Ошибка при получении брокерских счетов для пользователя %s: %v", FormatInteger(int64(userID)), err)
 		b.sendMessage(chatID, "❌ Ошибка при получении брокерских счетов. Попробуйте позже.")
 		return
 	}
@@ -48,7 +48,7 @@ func (b *Bot) sendBrokerageAccountsCommand(ctx context.Context, chatID int64, us
 		text += "\n"
 	}
 
-	text += fmt.Sprintf("📊 Всего счетов: %d", len(accounts))
+	text += fmt.Sprintf("📊 Всего счетов: %s", FormatInteger(int64(len(accounts))))
 
 	b.sendMessage(chatID, text)
 }

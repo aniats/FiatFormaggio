@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/aniats/FiatFormaggio/internal/app"
 	"github.com/aniats/FiatFormaggio/internal/domain"
 	"github.com/aniats/FiatFormaggio/internal/middleware"
 	"github.com/aniats/FiatFormaggio/internal/repository"
@@ -176,6 +177,6 @@ func (s *CachedCurrencyService) updateCurrencyRates(ctx context.Context) error {
 		}
 	}
 
-	log.Printf("Successfully updated %d currency rates", len(externalRates))
+	log.Printf("Successfully updated %s currency rates", app.FormatInteger(int64(len(externalRates))))
 	return nil
 }

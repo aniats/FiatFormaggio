@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strings"
 
 	"github.com/aniats/FiatFormaggio/internal/domain"
 )
@@ -60,7 +59,7 @@ func (b *Bot) processTotalBalanceCommand(ctx context.Context, chatID int64, user
 
 		for _, currency := range currencies {
 			rate := exchangeRates[currency]
-			message += fmt.Sprintf("  %s: %.4f ₽\n", currency, rate)
+			message += fmt.Sprintf("  %s: %s ₽\n", currency, FormatRate(rate))
 		}
 		message += "\n"
 	}
@@ -89,7 +88,7 @@ func (b *Bot) processTotalBalanceCommand(ctx context.Context, chatID int64, user
 		grandTotalRUB += totalRUB
 	}
 
-	message += fmt.Sprintf("🎯 ИТОГО: %s ₽\n", formatNumber(grandTotalRUB))
+	message += fmt.Sprintf("🎯 ИТОГО: %s ₽\n", FormatNumber(grandTotalRUB))
 	b.sendMessage(chatID, message)
 	return nil, nil
 }
@@ -183,7 +182,7 @@ func calculateCashHoldingsSummary(holdings []domain.CashHolding, exchangeRates m
 }
 
 func formatAccountSummary(accountType string, count int64, currencyTotals map[domain.CurrencyName]float64, totalRUB float64, exchangeRates map[domain.CurrencyName]float64) string {
-	message := fmt.Sprintf("📊 %s (%d):\n", accountType, count)
+	message := fmt.Sprintf("📊 %s (%s):\n", accountType, FormatInteger(count))
 
 	var currencies []domain.CurrencyName
 	for currency := range currencyTotals {
@@ -195,35 +194,16 @@ func formatAccountSummary(accountType string, count int64, currencyTotals map[do
 
 	for _, currency := range currencies {
 		amount := currencyTotals[currency]
-		message += fmt.Sprintf("  %s: %s %s", currency, formatNumber(amount), currency.Symbol())
+		message += fmt.Sprintf("  %s: %s %s", currency, FormatNumber(amount), currency.Symbol())
 
 		if currency != domain.RUB {
 			rubEquivalent := amount * exchangeRates[currency]
-			message += fmt.Sprintf(" (%s ₽)", formatNumber(rubEquivalent))
+			message += fmt.Sprintf(" (%s ₽)", FormatNumber(rubEquivalent))
 		}
 		message += "\n"
 	}
 
-	message += fmt.Sprintf("  Всего: %s ₽\n\n", formatNumber(totalRUB))
+	message += fmt.Sprintf("  Всего: %s ₽\n\n", FormatNumber(totalRUB))
 	return message
 }
 
-func formatNumber(num float64) string {
-	str := fmt.Sprintf("%.2f", num)
-	parts := strings.Split(str, ".")
-	intPart := parts[0]
-	decPart := parts[1]
-
-	if len(intPart) > 3 {
-		var result strings.Builder
-		for i, digit := range intPart {
-			if i > 0 && (len(intPart)-i)%3 == 0 {
-				result.WriteString(",")
-			}
-			result.WriteRune(digit)
-		}
-		intPart = result.String()
-	}
-
-	return intPart + "." + decPart
-}

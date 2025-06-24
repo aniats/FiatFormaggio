@@ -178,7 +178,7 @@ func (b *Bot) Start(ctx context.Context) error {
 
 	updates := b.botAPI.GetLastEvents()
 
-	log.Printf("Bot started with %d workers", b.workerPool.workers)
+	log.Printf("Bot started with %s workers", FormatInteger(int64(b.workerPool.workers)))
 
 	for {
 		select {
@@ -218,7 +218,7 @@ func (b *Bot) Start(ctx context.Context) error {
 			case <-ctx.Done():
 				return ctx.Err()
 			default:
-				log.Printf("Worker pool is full, dropping message from chat %d", update.Message.Chat.ID)
+				log.Printf("Worker pool is full, dropping message from chat %s", FormatInteger(update.Message.Chat.ID))
 			}
 		}
 	}
@@ -231,7 +231,7 @@ func (b *Bot) Stop() {
 
 func (b *Bot) sendMessage(chatID int64, text string) {
 	if err := b.botAPI.SendMessage(chatID, text); err != nil {
-		log.Printf("Error sending message to chat %d: %v", chatID, err)
+		log.Printf("Error sending message to chat %s: %v", FormatInteger(chatID), err)
 	}
 }
 
@@ -268,7 +268,7 @@ func (b *Bot) processMessage(ctx context.Context, message *Message) {
 
 	isNewUser, err := b.financeService.EnsureUserExists(ctx, userID, telegramUsername)
 	if err != nil {
-		log.Printf("Failed to ensure user exists for userID %d: %v", userID, err)
+		log.Printf("Failed to ensure user exists for userID %s: %v", FormatInteger(int64(userID)), err)
 		b.sendMessage(chatID, "❌ Ошибка инициализации пользователя. Попробуйте позже.")
 		return
 	}
@@ -390,7 +390,7 @@ func (wp *WorkerPool) Start(ctx context.Context) {
 		wp.wg.Add(1)
 		go wp.worker(ctx, i+1)
 	}
-	log.Printf("Started %d workers", wp.workers)
+	log.Printf("Started %s workers", FormatInteger(int64(wp.workers)))
 }
 
 func (wp *WorkerPool) Stop() {
@@ -402,16 +402,16 @@ func (wp *WorkerPool) Stop() {
 func (wp *WorkerPool) worker(ctx context.Context, workerID int64) {
 	defer wp.wg.Done()
 
-	log.Printf("Worker %d started", workerID)
+	log.Printf("Worker %s started", FormatInteger(workerID))
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Printf("Worker %d stopping due to context cancellation", workerID)
+			log.Printf("Worker %s stopping due to context cancellation", FormatInteger(workerID))
 			return
 		case job, ok := <-wp.jobChannel:
 			if !ok {
-				log.Printf("Worker %d stopping due to closed channel", workerID)
+				log.Printf("Worker %s stopping due to closed channel", FormatInteger(workerID))
 				return
 			}
 

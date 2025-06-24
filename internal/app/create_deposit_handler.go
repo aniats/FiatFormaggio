@@ -77,9 +77,9 @@ func (h *DepositCreationHandler) handleName(bot *Bot, session *UserSession, inpu
 	text := fmt.Sprintf(`✅ Название: %s
 		
 		Шаг 2/5: Введите сумму депозита
-		Например: 100000, 50000.50
+		Например: %s, %s
 		
-		Минимум: 1, Максимум: 1,000,000,000`, name)
+		Минимум: %s, Максимум: %s`, name, FormatInteger(100000), FormatNumber(50000.50), FormatInteger(1), FormatInteger(1000000000))
 
 	bot.sendMessage(session.ChatID, text)
 	return nil
@@ -88,7 +88,7 @@ func (h *DepositCreationHandler) handleName(bot *Bot, session *UserSession, inpu
 func (h *DepositCreationHandler) handleAmount(bot *Bot, session *UserSession, input string) error {
 	amount, err := strconv.ParseFloat(strings.TrimSpace(input), 64)
 	if err != nil {
-		bot.sendMessage(session.ChatID, "❌ Некорректная сумма. Введите число (например: 100000 или 50000.50):")
+		bot.sendMessage(session.ChatID, fmt.Sprintf("❌ Некорректная сумма. Введите число (например: %s или %s):", FormatInteger(100000), FormatNumber(50000.50)))
 		return nil
 	}
 
@@ -100,7 +100,7 @@ func (h *DepositCreationHandler) handleAmount(bot *Bot, session *UserSession, in
 	session.SetData("amount", amount)
 	session.CurrentStep = StepCurrency
 
-	text := fmt.Sprintf(`✅ Сумма: %.2f
+	text := fmt.Sprintf(`✅ Сумма: %s
 
 		Шаг 3/5: Выберите валюту
 		Введите код валюты или название:
@@ -112,7 +112,7 @@ func (h *DepositCreationHandler) handleAmount(bot *Bot, session *UserSession, in
 		• CNY, юань - Китайский юань ¥
 		• GBP, фунт - Британский фунт £
 		
-		По умолчанию: RUB (введите "пропустить" для RUB)`, amount)
+		По умолчанию: RUB (введите "пропустить" для RUB)`, FormatNumber(amount))
 
 	bot.sendMessage(session.ChatID, text)
 	return nil
@@ -206,7 +206,7 @@ func (h *DepositCreationHandler) handleInterestRate(bot *Bot, session *UserSessi
 func (h *DepositCreationHandler) sendExpirationDatePrompt(bot *Bot, session *UserSession) {
 	rateText := "не указана"
 	if rate := session.GetFloat("interest_rate"); rate > 0 {
-		rateText = fmt.Sprintf("%.2f%%", rate)
+		rateText = fmt.Sprintf("%s%%", FormatNumber(rate))
 	}
 
 	text := fmt.Sprintf(`✅ Процентная ставка: %s
@@ -289,11 +289,11 @@ func (h *DepositCreationHandler) FormatConfirmation(session *UserSession) string
 
 	text := "📋 Подтверждение создания депозита:\n\n"
 	text += fmt.Sprintf("📝 Название: %s\n", name)
-	text += fmt.Sprintf("💰 Сумма: %.2f %s\n", amount, currency.Symbol())
+	text += fmt.Sprintf("💰 Сумма: %s %s\n", FormatNumber(amount), currency.Symbol())
 	text += fmt.Sprintf("💱 Валюта: %s (%s)\n", currency, currency.ToHumanRussian())
 
 	if rate := session.GetFloat("interest_rate"); rate > 0 {
-		text += fmt.Sprintf("📈 Процентная ставка: %.2f%%\n", rate)
+		text += fmt.Sprintf("📈 Процентная ставка: %s%%\n", FormatNumber(rate))
 	} else {
 		text += "📈 Процентная ставка: не указана\n"
 	}
@@ -360,7 +360,7 @@ func (h *DepositCreationHandler) validateAmount(amount float64) error {
 		return fmt.Errorf("сумма должна быть положительной")
 	}
 	if amount > 1000000000 {
-		return fmt.Errorf("слишком большая сумма (максимум 1 миллиард)")
+		return fmt.Errorf("слишком большая сумма (максимум %s)", FormatInteger(1000000000))
 	}
 	return nil
 }
@@ -416,16 +416,16 @@ func (h *DepositCreationHandler) sendDepositCreatedConfirmation(bot *Bot, chatID
 
 	text := fmt.Sprintf("✅ Депозит успешно создан!\n\n")
 	text += fmt.Sprintf("📋 Название: %s\n", deposit.Name)
-	text += fmt.Sprintf("💰 Сумма: %.2f %s\n", amount, deposit.Currency)
+	text += fmt.Sprintf("💰 Сумма: %s %s\n", FormatNumber(amount), deposit.Currency)
 
 	rate := float64(deposit.InterestRateBasisPoints) / 100.0
-	text += fmt.Sprintf("📈 Процентная ставка: %.2f%%\n", rate)
+	text += fmt.Sprintf("📈 Процентная ставка: %s%%\n", FormatNumber(rate))
 
 	if deposit.ExpirationDate != nil {
 		text += fmt.Sprintf("📅 Дата окончания: %s\n", deposit.ExpirationDate.Format("02.01.2006"))
 	}
 
-	text += fmt.Sprintf("🆔 ID: %d\n", deposit.Id)
+	text += fmt.Sprintf("🆔 ID: %s\n", FormatInteger(int64(deposit.Id)))
 	text += fmt.Sprintf("📅 Создан: %s", time.Now().Format("02.01.2006 15:04"))
 
 	bot.sendMessage(chatID, text)

@@ -43,7 +43,7 @@ func (b *Bot) sendCurrencyRatesCommand(ctx context.Context, chatID int64) {
 		for _, rate := range rates {
 			if rate.Currency == currencyCode {
 				unitRate := float64(rate.RateMinorUnits) / 100.0
-				text += fmt.Sprintf("%s: %.4f ₽\n", rate.Currency, unitRate)
+				text += fmt.Sprintf("%s: %s ₽\n", rate.Currency, FormatRate(unitRate))
 				majorRatesShown[currencyCode] = true
 				break
 			}
@@ -55,11 +55,11 @@ func (b *Bot) sendCurrencyRatesCommand(ctx context.Context, chatID int64) {
 	for _, rate := range rates {
 		if !majorRatesShown[rate.Currency] {
 			unitRate := float64(rate.RateMinorUnits) / 100.0
-			text += fmt.Sprintf("%s: %.4f ₽\n", rate.Currency, unitRate)
+			text += fmt.Sprintf("%s: %s ₽\n", rate.Currency, FormatRate(unitRate))
 		}
 	}
 
-	text += fmt.Sprintf("\n📊 Всего валют: %d", len(rates))
+	text += fmt.Sprintf("\n📊 Всего валют: %s", FormatInteger(int64(len(rates))))
 
 	b.sendMessage(chatID, text)
 }

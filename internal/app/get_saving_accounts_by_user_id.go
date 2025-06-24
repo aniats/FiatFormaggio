@@ -23,7 +23,7 @@ func (b *Bot) sendSavingAccountsCommand(ctx context.Context, chatID int64, userI
 
 	accounts, err := b.financeService.GetSavingAccountsByUserID(ctx, userID)
 	if err != nil {
-		log.Printf("Ошибка при получении накопительных счетов для пользователя %d: %v", userID, err)
+		log.Printf("Ошибка при получении накопительных счетов для пользователя %s: %v", FormatInteger(int64(userID)), err)
 		b.sendMessage(chatID, "❌ Ошибка при получении накопительных счетов. Попробуйте позже.")
 		return
 	}
@@ -42,7 +42,7 @@ func (b *Bot) sendSavingAccountsCommand(ctx context.Context, chatID int64, userI
 		text += fmt.Sprintf("   💰 %s\n", FormatAmount(amount, account.Currency.String()))
 		
 		if interestRate > 0 {
-			text += fmt.Sprintf("   📈 %.2f%%/год\n", interestRate)
+			text += fmt.Sprintf("   📈 %s%%/год\n", FormatNumber(interestRate))
 		}
 
 		if account.ExpirationDate != nil {
@@ -51,7 +51,7 @@ func (b *Bot) sendSavingAccountsCommand(ctx context.Context, chatID int64, userI
 		text += "\n"
 	}
 
-	text += fmt.Sprintf("📊 Всего счетов: %d", len(accounts))
+	text += fmt.Sprintf("📊 Всего счетов: %s", FormatInteger(int64(len(accounts))))
 
 	b.sendMessage(chatID, text)
 }

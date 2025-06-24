@@ -100,14 +100,14 @@ func (h *CashHoldingCreationHandler) handleAmount(bot *Bot, session *UserSession
 	}
 
 	if amount > 1000000000 {
-		bot.sendMessage(session.ChatID, "❌ Слишком большая сумма (максимум 1,000,000,000). Попробуйте еще раз:")
+		bot.sendMessage(session.ChatID, fmt.Sprintf("❌ Слишком большая сумма (максимум %s). Попробуйте еще раз:", FormatInteger(1000000000)))
 		return nil
 	}
 
 	session.SetData("amount", amount)
 	session.CurrentStep = StepCurrency
 
-	text := fmt.Sprintf(`✅ Сумма: %.2f
+	text := fmt.Sprintf(`✅ Сумма: %s
 
 	Шаг 3/4: Выберите валюту
 	Доступные варианты:
@@ -117,7 +117,7 @@ func (h *CashHoldingCreationHandler) handleAmount(bot *Bot, session *UserSession
 	• CNY, юань - Китайский юань ¥
 	• GBP, фунт - Британский фунт £
 	
-	По умолчанию: RUB (введите "пропустить" для RUB)`, amount)
+	По умолчанию: RUB (введите "пропустить" для RUB)`, FormatNumber(amount))
 
 	bot.sendMessage(session.ChatID, text)
 	return nil
