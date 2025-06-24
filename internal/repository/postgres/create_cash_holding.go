@@ -2,8 +2,9 @@ package postgres
 
 import (
 	"context"
-	"fmt"
+
 	"github.com/aniats/FiatFormaggio/internal/domain"
+	"github.com/aniats/FiatFormaggio/internal/errors"
 )
 
 func (repo *Repository) CreateCashHolding(ctx context.Context, cash *domain.CashHolding) error {
@@ -14,20 +15,26 @@ func (repo *Repository) CreateCashHolding(ctx context.Context, cash *domain.Cash
 				name, 
 				amount_minor_units, 
 				currency
-			) VALUES ($1, $2, $3, $4)`
+			) VALUES ($1, $2, $3, $4)
+			RETURNING id`
 
-		_, err := repo.db.ExecContext(
+		var id int64
+
+		err := repo.db.QueryRowContext(
 			ctx,
 			query,
 			cash.UserId,
 			cash.Name,
 			cash.AmountMinorUnits,
 			cash.Currency,
-		)
+		).Scan(&id)
 
 		if err != nil {
-			return nil, fmt.Errorf("failed to create cash holding: %w", err)
+			return nil, errors.WrapRepositoryError(err)
 		}
+
+		// Update the cash holding object with the returned ID
+		cash.Id = id
 
 		return nil, nil
 	}

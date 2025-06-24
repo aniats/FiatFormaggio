@@ -5,32 +5,33 @@ import (
 	"fmt"
 	"github.com/aniats/FiatFormaggio/internal/domain"
 	"log"
-
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
 )
 
-
 func (b *Bot) sendBrokerageAccountsCommand(ctx context.Context, chatID int64, userID domain.UserId) {
-	tracer := otel.Tracer("fiat-formaggio")
-	ctx, span := tracer.Start(ctx, "Bot.sendBrokerageAccountsCommand")
-	defer span.End()
+	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
+		return b.processBrokerageAccountsCommand(ctx, chatID, userID)
+	}
 
-	span.SetAttributes(
-		attribute.Int64("user.id", int64(userID)),
-		attribute.Int64("chat.id", chatID),
-	)
+	params := map[string]interface{}{
+		"user_id": int64(userID),
+		"chat_id": chatID,
+	}
 
+	wrappedHandler := b.interceptor.Chain(handler, "Bot.sendBrokerageAccountsCommand")
+	_, _ = wrappedHandler(ctx, params)
+}
+
+func (b *Bot) processBrokerageAccountsCommand(ctx context.Context, chatID int64, userID domain.UserId) (interface{}, error) {
 	accounts, err := b.financeService.GetBrokerageAccountsByUserID(ctx, userID)
 	if err != nil {
 		log.Printf("Ошибка при получении брокерских счетов для пользователя %s: %v", FormatInteger(int64(userID)), err)
 		b.sendMessage(chatID, "❌ Ошибка при получении брокерских счетов. Попробуйте позже.")
-		return
+		return nil, err
 	}
 
 	if len(accounts) == 0 {
 		b.sendMessage(chatID, "📭 У вас пока нет сохраненных брокерских счетов.\n\nСоздайте первый счет: /create_brokerage_account")
-		return
+		return nil, nil
 	}
 
 	text := "📈 Ваши брокерские счета:\n\n"
@@ -39,11 +40,11 @@ func (b *Bot) sendBrokerageAccountsCommand(ctx context.Context, chatID int64, us
 
 		text += fmt.Sprintf("%d. %s\n", i+1, account.Name)
 		text += fmt.Sprintf("   💰 %s\n", FormatAmount(amount, account.Currency.String()))
-		
+
 		if account.Broker != nil {
 			text += fmt.Sprintf("   🏦 %s\n", *account.Broker)
 		}
-		
+
 		text += fmt.Sprintf("   📊 %s\n", FormatAccountType(account.AccountType))
 		text += "\n"
 	}
@@ -51,5 +52,5 @@ func (b *Bot) sendBrokerageAccountsCommand(ctx context.Context, chatID int64, us
 	text += fmt.Sprintf("📊 Всего счетов: %s", FormatInteger(int64(len(accounts))))
 
 	b.sendMessage(chatID, text)
+	return nil, nil
 }
-

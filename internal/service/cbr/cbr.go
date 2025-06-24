@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/aniats/FiatFormaggio/internal/domain"
+	"github.com/aniats/FiatFormaggio/internal/errors"
 	"github.com/aniats/FiatFormaggio/internal/middleware"
 	"golang.org/x/net/html/charset"
 )
@@ -57,7 +58,7 @@ func (s *CBRService) GetCurrencyRates(ctx context.Context, date time.Time) ([]*d
 
 		var valCurs ValCurs
 		if err := decoder.Decode(&valCurs); err != nil {
-			return nil, fmt.Errorf("failed to decode XML: %w", err)
+			return nil, errors.WrapExternalAPIError(err)
 		}
 
 		rates := make([]*domain.CurrencyRateCBR, 0, len(valCurs.Valutes))
@@ -90,19 +91,19 @@ func (s *CBRService) fetchCBRData(ctx context.Context, date time.Time) (*http.Re
 
 		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 		if err != nil {
-			return nil, fmt.Errorf("error creating request: %w", err)
+			return nil, errors.WrapExternalAPIError(err)
 		}
 
 		req.Header.Set("User-Agent", "Mozilla/5.0")
 
 		resp, err := s.client.Do(req)
 		if err != nil {
-			return nil, fmt.Errorf("request failed: %w", err)
+			return nil, errors.WrapExternalAPIError(err)
 		}
 
 		if resp.StatusCode != http.StatusOK {
 			resp.Body.Close()
-			return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+			return nil, errors.NewTechnicalError(errors.CodeExternalAPIError, fmt.Sprintf("unexpected status code: %d", resp.StatusCode))
 		}
 
 		return resp, nil
@@ -124,12 +125,12 @@ func (s *CBRService) parseValuteToRate(valute Valute) (*domain.CurrencyRateCBR, 
 	valueStr := strings.Replace(valute.Value, ",", ".", -1)
 	value, err := strconv.ParseFloat(valueStr, 64)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse value %s: %w", valute.Value, err)
+		return nil, errors.WrapParseError(err).WithContext("value", valute.Value)
 	}
 
 	nominal, err := strconv.Atoi(valute.Nominal)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse nominal %s: %w", valute.Nominal, err)
+		return nil, errors.WrapParseError(err).WithContext("nominal", valute.Nominal)
 	}
 
 	return &domain.CurrencyRateCBR{

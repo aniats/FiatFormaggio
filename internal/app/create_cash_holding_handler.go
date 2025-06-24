@@ -4,12 +4,10 @@ import (
 	"context"
 	"fmt"
 	"github.com/aniats/FiatFormaggio/internal/domain"
+	"github.com/aniats/FiatFormaggio/internal/errors"
 	"github.com/aniats/FiatFormaggio/internal/service/finance/models"
 	"strconv"
 	"strings"
-
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
 )
 
 type CashHoldingCreationHandler struct{}
@@ -19,16 +17,22 @@ func (h *CashHoldingCreationHandler) GetSessionType() SessionType {
 }
 
 func (h *CashHoldingCreationHandler) HandleStep(ctx context.Context, bot *Bot, session *UserSession, msg *Message) error {
-	tracer := otel.Tracer("fiat-formaggio")
-	ctx, span := tracer.Start(ctx, "CashHoldingCreationHandler.HandleStep")
-	defer span.End()
+	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
+		return nil, h.processStep(ctx, bot, session, msg)
+	}
 
-	span.SetAttributes(
-		attribute.Int64("user.id", int64(session.UserID)),
-		attribute.String("session.step", string(session.CurrentStep)),
-		attribute.String("session.type", "create_cash_holding"),
-	)
+	params := map[string]interface{}{
+		"user_id":      int64(session.UserID),
+		"session_step": string(session.CurrentStep),
+		"session_type": "create_cash_holding",
+	}
 
+	wrappedHandler := bot.interceptor.Chain(handler, "CashHoldingCreationHandler.HandleStep")
+	_, err := wrappedHandler(ctx, params)
+	return err
+}
+
+func (h *CashHoldingCreationHandler) processStep(ctx context.Context, bot *Bot, session *UserSession, msg *Message) error {
 	switch session.CurrentStep {
 	case StepStart:
 		return h.handleStart(bot, session)
@@ -41,7 +45,7 @@ func (h *CashHoldingCreationHandler) HandleStep(ctx context.Context, bot *Bot, s
 	case StepConfirmation:
 		return h.handleConfirmation(ctx, bot, session, msg.Text)
 	default:
-		return fmt.Errorf("неизвестный шаг: %s", session.CurrentStep)
+		return errors.ErrUnknownStep.WithContext("step", session.CurrentStep)
 	}
 }
 
@@ -61,13 +65,8 @@ func (h *CashHoldingCreationHandler) handleStart(bot *Bot, session *UserSession)
 func (h *CashHoldingCreationHandler) handleName(bot *Bot, session *UserSession, input string) error {
 	name := strings.TrimSpace(input)
 
-	if name == "" {
-		bot.sendMessage(session.ChatID, "❌ Название не может быть пустым. Попробуйте еще раз:")
-		return nil
-	}
-
-	if len(name) > 255 {
-		bot.sendMessage(session.ChatID, "❌ Название слишком длинное (максимум 255 символов). Попробуйте еще раз:")
+	if err := h.validateName(name); err != nil {
+		bot.sendMessage(session.ChatID, errors.GetUserMessage(err))
 		return nil
 	}
 
@@ -90,17 +89,12 @@ func (h *CashHoldingCreationHandler) handleAmount(bot *Bot, session *UserSession
 
 	amount, err := strconv.ParseFloat(amountStr, 64)
 	if err != nil {
-		bot.sendMessage(session.ChatID, "❌ Неверный формат суммы. Введите число (например: 5000, 1500.50, 100):")
+		bot.sendMessage(session.ChatID, errors.GetUserMessage(errors.ErrInvalidInput))
 		return nil
 	}
 
-	if amount < 0 {
-		bot.sendMessage(session.ChatID, "❌ Сумма не может быть отрицательной. Попробуйте еще раз:")
-		return nil
-	}
-
-	if amount > 1000000000 {
-		bot.sendMessage(session.ChatID, fmt.Sprintf("❌ Слишком большая сумма (максимум %s). Попробуйте еще раз:", FormatInteger(1000000000)))
+	if err := h.validateAmount(amount); err != nil {
+		bot.sendMessage(session.ChatID, errors.GetUserMessage(err))
 		return nil
 	}
 
@@ -126,7 +120,7 @@ func (h *CashHoldingCreationHandler) handleAmount(bot *Bot, session *UserSession
 func (h *CashHoldingCreationHandler) handleCurrency(bot *Bot, session *UserSession, input string) error {
 	currencyStr := strings.TrimSpace(input)
 
-	if strings.ToLower(currencyStr) == "пропустить" || currencyStr == "" {
+	if IsSkipResponse(currencyStr) || currencyStr == "" {
 		session.SetData("currency", domain.RUB)
 		session.CurrentStep = StepConfirmation
 		h.sendConfirmation(bot, session)
@@ -135,17 +129,8 @@ func (h *CashHoldingCreationHandler) handleCurrency(bot *Bot, session *UserSessi
 
 	currency, err := domain.CurrencyFromHuman(currencyStr)
 	if err != nil {
-		text := fmt.Sprintf(`❌ Неизвестная валюта "%s"
-
-		Доступные варианты:
-		• RUB, рубль, российский рубль
-		• USD, доллар, американский доллар  
-		• EUR, евро
-		• CNY, юань, китайский юань
-		• GBP, фунт, британский фунт
-		
-		Попробуйте еще раз:`, currencyStr)
-		bot.sendMessage(session.ChatID, text)
+		currencyErr := errors.NewCurrencyError(currencyStr)
+		bot.sendMessage(session.ChatID, errors.GetUserMessage(currencyErr))
 		return nil
 	}
 
@@ -177,34 +162,43 @@ func (h *CashHoldingCreationHandler) sendConfirmation(bot *Bot, session *UserSes
 }
 
 func (h *CashHoldingCreationHandler) handleConfirmation(ctx context.Context, bot *Bot, session *UserSession, input string) error {
-	response := strings.ToLower(strings.TrimSpace(input))
-
-	if response == "нет" || response == "отмена" {
+	if IsNegativeResponse(input) {
 		bot.sessionManager.ClearSession(session.UserID)
 		bot.sendMessage(session.ChatID, "❌ Создание наличного счета отменено.")
 		return nil
 	}
 
-	if response != "да" && response != "yes" && response != "подтверждаю" {
-		bot.sendMessage(session.ChatID, "Пожалуйста, ответьте 'да' для подтверждения или 'нет' для отмены:")
+	if !IsPositiveResponse(input) {
+		if IsValidResponse(input) {
+			bot.sendMessage(session.ChatID, "Пожалуйста, ответьте 'да' для подтверждения или 'нет' для отмены:")
+		} else {
+			bot.sendMessage(session.ChatID, GetSuggestionMessage())
+		}
 		return nil
 	}
 
-	// Prevent double execution by clearing session first
 	bot.sessionManager.ClearSession(session.UserID)
 	return h.CompleteSession(ctx, bot, session)
 }
 
 func (h *CashHoldingCreationHandler) CompleteSession(ctx context.Context, bot *Bot, session *UserSession) error {
-	tracer := otel.Tracer("fiat-formaggio")
-	ctx, span := tracer.Start(ctx, "CashHoldingCreationHandler.CompleteSession")
-	defer span.End()
+	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
+		return nil, h.executeCompletion(ctx, bot, session)
+	}
 
 	name := session.GetData("name").(string)
-	span.SetAttributes(
-		attribute.Int64("user.id", int64(session.UserID)),
-		attribute.String("cash_holding.name", name),
-	)
+	params := map[string]interface{}{
+		"user_id":           int64(session.UserID),
+		"cash_holding_name": name,
+	}
+
+	wrappedHandler := bot.interceptor.Chain(handler, "CashHoldingCreationHandler.CompleteSession")
+	_, err := wrappedHandler(ctx, params)
+	return err
+}
+
+func (h *CashHoldingCreationHandler) executeCompletion(ctx context.Context, bot *Bot, session *UserSession) error {
+	name := session.GetData("name").(string)
 	amount := session.GetData("amount").(float64)
 	currency := session.GetData("currency").(domain.CurrencyName)
 
@@ -217,18 +211,23 @@ func (h *CashHoldingCreationHandler) CompleteSession(ctx context.Context, bot *B
 
 	cashHolding, err := bot.financeService.CreateCashHolding(ctx, req)
 	if err != nil {
-		bot.sendMessage(session.ChatID, fmt.Sprintf("❌ Ошибка при создании наличного счета: %v", err))
-		return err
+		serviceErr := errors.WrapError(err, errors.CodeInternalError, 
+			"Failed to create cash holding", 
+			"❌ Ошибка при создании наличного счета. Попробуйте позже.")
+		bot.sendMessage(session.ChatID, errors.GetUserMessage(serviceErr))
+		return serviceErr
 	}
 
 	text := fmt.Sprintf(`✅ Наличный счет успешно создан!
 
-	📝 Название: %s
-	💰 Сумма: %s
+📝 Название: %s
+💰 Сумма: %s
+🆔 ID: %s
 
-	Используйте /cash_holdings чтобы посмотреть все ваши наличные счета.`,
+Используйте /cash_holdings чтобы посмотреть все ваши наличные счета.`,
 		cashHolding.Name,
-		currency.FormatAmountRussian(amount))
+		currency.FormatAmountRussian(amount),
+		FormatInteger(int64(cashHolding.Id)))
 
 	bot.sendMessage(session.ChatID, text)
 	return nil
@@ -244,4 +243,24 @@ func (h *CashHoldingCreationHandler) ValidateInput(step SessionStep, input strin
 
 func (h *CashHoldingCreationHandler) FormatConfirmation(session *UserSession) string {
 	return "Confirmation"
+}
+
+func (h *CashHoldingCreationHandler) validateName(name string) error {
+	if name == "" {
+		return errors.NewBusinessError(errors.CodeInvalidName, "❌ Название не может быть пустым. Попробуйте еще раз:")
+	}
+	if len(name) > 255 {
+		return errors.NewBusinessError(errors.CodeInvalidName, "❌ Название слишком длинное (максимум 255 символов). Попробуйте еще раз:")
+	}
+	return nil
+}
+
+func (h *CashHoldingCreationHandler) validateAmount(amount float64) error {
+	if amount < 0 {
+		return errors.NewBusinessError(errors.CodeInvalidAmount, "❌ Сумма не может быть отрицательной. Попробуйте еще раз:")
+	}
+	if amount > 1000000000 {
+		return errors.NewBusinessError(errors.CodeInvalidAmount, fmt.Sprintf("❌ Слишком большая сумма (максимум %s). Попробуйте еще раз:", FormatInteger(1000000000)))
+	}
+	return nil
 }

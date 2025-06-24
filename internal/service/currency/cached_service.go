@@ -2,21 +2,19 @@ package currency
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"sync"
 	"time"
 
 	"github.com/aniats/FiatFormaggio/internal/app"
 	"github.com/aniats/FiatFormaggio/internal/domain"
+	"github.com/aniats/FiatFormaggio/internal/errors"
 	"github.com/aniats/FiatFormaggio/internal/middleware"
 	"github.com/aniats/FiatFormaggio/internal/repository"
 )
 
 const (
-	// CacheUpdateInterval - how often to update currency rates
 	CacheUpdateInterval = 24 * time.Hour
-	// MinorUnitsMultiplier - conversion factor for minor units (kopecks to rubles)
 	MinorUnitsMultiplier = 100
 )
 
@@ -75,20 +73,20 @@ func (s *CachedCurrencyService) GetCurrencyRates(ctx context.Context) ([]domain.
 
 		rates, repoErr := s.repo.GetCurrencyRates(ctx)
 		if repoErr != nil {
-			return nil, fmt.Errorf("failed to get cached currency rates: %w", repoErr)
+			return nil, errors.WrapRepositoryError(repoErr)
 		}
 
 		if len(rates) == 0 {
 			s.mu.RUnlock()
 			if updateErr := s.updateCurrencyRates(ctx); updateErr != nil {
 				s.mu.RLock()
-				return nil, fmt.Errorf("no cached rates and update failed: %w", updateErr)
+				return nil, errors.WrapServiceError(updateErr)
 			}
 			s.mu.RLock()
 
 			rates, repoErr = s.repo.GetCurrencyRates(ctx)
 			if repoErr != nil {
-				return nil, fmt.Errorf("failed to get currency rates after update: %w", repoErr)
+				return nil, errors.WrapRepositoryError(repoErr)
 			}
 		}
 
@@ -130,7 +128,7 @@ func (s *CachedCurrencyService) periodicUpdate(ctx context.Context) {
 func (s *CachedCurrencyService) updateIfNeeded(ctx context.Context) error {
 	lastUpdate, err := s.repo.GetLastUpdateTime(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to check last update time: %w", err)
+		return errors.WrapRepositoryError(err)
 	}
 
 	if lastUpdate == nil || time.Since(*lastUpdate) > CacheUpdateInterval {
@@ -150,7 +148,7 @@ func (s *CachedCurrencyService) updateCurrencyRates(ctx context.Context) error {
 
 	externalRates, err := s.externalService.GetCurrencyRates(ctx, time.Now())
 	if err != nil {
-		return fmt.Errorf("failed to fetch currency rates from external service: %w", err)
+		return errors.WrapExternalAPIError(err)
 	}
 
 	now := time.Now()

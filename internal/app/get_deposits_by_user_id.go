@@ -7,22 +7,20 @@ import (
 	"log"
 )
 
-
 func (b *Bot) sendDepositsCommand(ctx context.Context, chatID int64, userID domain.UserId) {
-	// Use unified interceptor for tracing and middleware
 	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
 		params := input.(map[string]interface{})
 		chatID := params["chatID"].(int64)
 		userID := params["userID"].(domain.UserId)
-		
+
 		return b.processDepositsCommand(ctx, chatID, userID)
 	}
-	
+
 	params := map[string]interface{}{
 		"chatID": chatID,
 		"userID": userID,
 	}
-	
+
 	wrappedHandler := b.interceptor.Chain(handler, "Bot.sendDepositsCommand")
 	_, _ = wrappedHandler(ctx, params)
 }
@@ -61,4 +59,3 @@ func (b *Bot) processDepositsCommand(ctx context.Context, chatID int64, userID d
 	b.sendMessage(chatID, text)
 	return nil, nil
 }
-

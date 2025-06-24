@@ -4,13 +4,11 @@ import (
 	"context"
 	"fmt"
 	"github.com/aniats/FiatFormaggio/internal/domain"
+	"github.com/aniats/FiatFormaggio/internal/errors"
 	"github.com/aniats/FiatFormaggio/internal/service/finance/models"
 	"strconv"
 	"strings"
 	"time"
-
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
 )
 
 type DepositCreationHandler struct{}
@@ -20,16 +18,22 @@ func (h *DepositCreationHandler) GetSessionType() SessionType {
 }
 
 func (h *DepositCreationHandler) HandleStep(ctx context.Context, bot *Bot, session *UserSession, msg *Message) error {
-	tracer := otel.Tracer("fiat-formaggio")
-	ctx, span := tracer.Start(ctx, "DepositCreationHandler.HandleStep")
-	defer span.End()
+	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
+		return nil, h.processStep(ctx, bot, session, msg)
+	}
 
-	span.SetAttributes(
-		attribute.Int64("user.id", int64(session.UserID)),
-		attribute.String("session.step", string(session.CurrentStep)),
-		attribute.String("session.type", "create_deposit"),
-	)
+	params := map[string]interface{}{
+		"user_id":      int64(session.UserID),
+		"session_step": string(session.CurrentStep),
+		"session_type": "create_deposit",
+	}
 
+	wrappedHandler := bot.interceptor.Chain(handler, "DepositCreationHandler.HandleStep")
+	_, err := wrappedHandler(ctx, params)
+	return err
+}
+
+func (h *DepositCreationHandler) processStep(ctx context.Context, bot *Bot, session *UserSession, msg *Message) error {
 	switch session.CurrentStep {
 	case StepStart:
 		return h.handleStart(bot, session)
@@ -46,7 +50,7 @@ func (h *DepositCreationHandler) HandleStep(ctx context.Context, bot *Bot, sessi
 	case StepConfirmation:
 		return h.handleConfirmation(ctx, bot, session, msg.Text)
 	default:
-		return fmt.Errorf("неизвестный шаг: %s", session.CurrentStep)
+		return errors.ErrUnknownStep.WithContext("step", session.CurrentStep)
 	}
 }
 
@@ -121,7 +125,7 @@ func (h *DepositCreationHandler) handleAmount(bot *Bot, session *UserSession, in
 func (h *DepositCreationHandler) handleCurrency(bot *Bot, session *UserSession, input string) error {
 	currencyStr := strings.TrimSpace(input)
 
-	if strings.ToLower(currencyStr) == "пропустить" || currencyStr == "" {
+	if IsSkipResponse(currencyStr) || currencyStr == "" {
 		session.SetData("currency", domain.RUB)
 		session.CurrentStep = StepInterestRate
 		h.sendInterestRatePrompt(bot, session)
@@ -179,7 +183,7 @@ func (h *DepositCreationHandler) sendInterestRatePrompt(bot *Bot, session *UserS
 func (h *DepositCreationHandler) handleInterestRate(bot *Bot, session *UserSession, input string) error {
 	rateStr := strings.TrimSpace(input)
 
-	if strings.ToLower(rateStr) == "пропустить" || rateStr == "" {
+	if IsSkipResponse(rateStr) || rateStr == "" {
 		session.CurrentStep = StepDate
 		h.sendExpirationDatePrompt(bot, session)
 		return nil
@@ -212,7 +216,7 @@ func (h *DepositCreationHandler) sendExpirationDatePrompt(bot *Bot, session *Use
 	text := fmt.Sprintf(`✅ Процентная ставка: %s
 
 		Шаг 5/5: Введите дату окончания депозита (необязательно)
-		Форматы: 31.12.2025, 2025-12-31
+		Форматы: 31.12.2025, 2025-12-31, 31/12/2025, 12/31/2025
 		
 		Введите "пропустить" если не хотите указывать дату`, rateText)
 
@@ -222,7 +226,7 @@ func (h *DepositCreationHandler) sendExpirationDatePrompt(bot *Bot, session *Use
 func (h *DepositCreationHandler) handleExpirationDate(bot *Bot, session *UserSession, input string) error {
 	dateStr := strings.TrimSpace(input)
 
-	if strings.ToLower(dateStr) == "пропустить" || dateStr == "" {
+	if IsSkipResponse(dateStr) || dateStr == "" {
 		session.CurrentStep = StepConfirmation
 		h.sendConfirmationPrompt(bot, session)
 		return nil
@@ -255,20 +259,21 @@ func (h *DepositCreationHandler) sendConfirmationPrompt(bot *Bot, session *UserS
 }
 
 func (h *DepositCreationHandler) handleConfirmation(ctx context.Context, bot *Bot, session *UserSession, input string) error {
-	response := strings.ToLower(strings.TrimSpace(input))
-
-	if response == "нет" || response == "no" || response == "отмена" {
+	if IsNegativeResponse(input) {
 		bot.sessionManager.ClearSession(session.UserID)
 		bot.sendMessage(session.ChatID, "❌ Создание депозита отменено.")
 		return nil
 	}
 
-	if response != "да" && response != "yes" && response != "y" {
-		bot.sendMessage(session.ChatID, "❓ Введите 'да' для создания или 'нет' для отмены:")
+	if !IsPositiveResponse(input) {
+		if IsValidResponse(input) {
+			bot.sendMessage(session.ChatID, "❓ Введите 'да' для создания или 'нет' для отмены:")
+		} else {
+			bot.sendMessage(session.ChatID, GetSuggestionMessage())
+		}
 		return nil
 	}
 
-	// Prevent double execution by clearing session first
 	bot.sessionManager.ClearSession(session.UserID)
 	return h.CompleteSession(ctx, bot, session)
 }
@@ -278,7 +283,6 @@ func (h *DepositCreationHandler) GetNextStep(currentStep SessionStep, input stri
 }
 
 func (h *DepositCreationHandler) ValidateInput(step SessionStep, input string) error {
-	// Implementation not needed for this approach, but required by interface
 	return nil
 }
 
@@ -308,15 +312,22 @@ func (h *DepositCreationHandler) FormatConfirmation(session *UserSession) string
 }
 
 func (h *DepositCreationHandler) CompleteSession(ctx context.Context, bot *Bot, session *UserSession) error {
-	tracer := otel.Tracer("fiat-formaggio")
-	ctx, span := tracer.Start(ctx, "DepositCreationHandler.CompleteSession")
-	defer span.End()
+	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
+		return nil, h.executeCompletion(ctx, bot, session)
+	}
 
-	span.SetAttributes(
-		attribute.Int64("user.id", int64(session.UserID)),
-		attribute.String("deposit.name", session.GetString("name")),
-		attribute.Float64("deposit.amount", session.GetFloat("amount")),
-	)
+	params := map[string]interface{}{
+		"user_id":        int64(session.UserID),
+		"deposit_name":   session.GetString("name"),
+		"deposit_amount": session.GetFloat("amount"),
+	}
+
+	wrappedHandler := bot.interceptor.Chain(handler, "DepositCreationHandler.CompleteSession")
+	_, err := wrappedHandler(ctx, params)
+	return err
+}
+
+func (h *DepositCreationHandler) executeCompletion(ctx context.Context, bot *Bot, session *UserSession) error {
 
 	req := &models.CreateDepositRequest{
 		UserID:    session.UserID,
@@ -347,38 +358,38 @@ func (h *DepositCreationHandler) CompleteSession(ctx context.Context, bot *Bot, 
 
 func (h *DepositCreationHandler) validateName(name string) error {
 	if name == "" {
-		return fmt.Errorf("название не может быть пустым")
+		return errors.ErrNameEmpty
 	}
 	if len(name) > 255 {
-		return fmt.Errorf("название слишком длинное (максимум 255 символов)")
+		return errors.ErrNameTooLong
 	}
 	return nil
 }
 
 func (h *DepositCreationHandler) validateAmount(amount float64) error {
 	if amount <= 0 {
-		return fmt.Errorf("сумма должна быть положительной")
+		return errors.ErrAmountNotPositive
 	}
 	if amount > 1000000000 {
-		return fmt.Errorf("слишком большая сумма (максимум %s)", FormatInteger(1000000000))
+		return errors.ErrAmountTooLarge
 	}
 	return nil
 }
 
 func (h *DepositCreationHandler) validateInterestRate(rate float64) error {
 	if rate < 0 || rate > 50 {
-		return fmt.Errorf("процентная ставка должна быть от 0 до 50%%")
+		return errors.ErrRateOutOfRange
 	}
 	return nil
 }
 
 func (h *DepositCreationHandler) validateDate(date time.Time) error {
 	if date.Before(time.Now()) {
-		return fmt.Errorf("дата не может быть в прошлом")
+		return errors.ErrDateInPast
 	}
 	maxDate := time.Now().AddDate(10, 0, 0)
 	if date.After(maxDate) {
-		return fmt.Errorf("слишком далекая дата (максимум 10 лет)")
+		return errors.ErrDateTooFar
 	}
 	return nil
 }
@@ -408,7 +419,7 @@ func (h *DepositCreationHandler) parseDate(dateStr string) (time.Time, error) {
 		}
 	}
 
-	return time.Time{}, fmt.Errorf("неверный формат даты")
+	return time.Time{}, errors.ErrInvalidDateFormat
 }
 
 func (h *DepositCreationHandler) sendDepositCreatedConfirmation(bot *Bot, chatID int64, deposit *domain.Deposit) {
@@ -418,11 +429,17 @@ func (h *DepositCreationHandler) sendDepositCreatedConfirmation(bot *Bot, chatID
 	text += fmt.Sprintf("📋 Название: %s\n", deposit.Name)
 	text += fmt.Sprintf("💰 Сумма: %s %s\n", FormatNumber(amount), deposit.Currency)
 
-	rate := float64(deposit.InterestRateBasisPoints) / 100.0
-	text += fmt.Sprintf("📈 Процентная ставка: %s%%\n", FormatNumber(rate))
+	if deposit.InterestRateBasisPoints > 0 {
+		rate := float64(deposit.InterestRateBasisPoints) / 100.0
+		text += fmt.Sprintf("📈 Процентная ставка: %s%%\n", FormatNumber(rate))
+	} else {
+		text += "📈 Процентная ставка: не указана\n"
+	}
 
 	if deposit.ExpirationDate != nil {
 		text += fmt.Sprintf("📅 Дата окончания: %s\n", deposit.ExpirationDate.Format("02.01.2006"))
+	} else {
+		text += "📅 Дата окончания: не указана\n"
 	}
 
 	text += fmt.Sprintf("🆔 ID: %s\n", FormatInteger(int64(deposit.Id)))

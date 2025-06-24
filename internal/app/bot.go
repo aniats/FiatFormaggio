@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/aniats/FiatFormaggio/internal/domain"
+	"github.com/aniats/FiatFormaggio/internal/errors"
 	"github.com/aniats/FiatFormaggio/internal/metrics"
 	"github.com/aniats/FiatFormaggio/internal/middleware"
 	"github.com/aniats/FiatFormaggio/internal/service/finance/models"
@@ -19,11 +20,8 @@ import (
 )
 
 const (
-	// UpdateTimeoutSeconds defines timeout for getting updates from Telegram API
-	UpdateTimeoutSeconds = 60
-	// DefaultWorkerPoolSize defines the number of worker goroutines for message processing
-	DefaultWorkerPoolSize = 10
-	// WorkerChannelBufferSize defines the buffer size for the worker channel
+	UpdateTimeoutSeconds    = 60
+	DefaultWorkerPoolSize   = 10
 	WorkerChannelBufferSize = 100
 )
 
@@ -89,6 +87,7 @@ type Bot struct {
 	workerPool      *WorkerPool
 	sessionManager  *UserSessionManager
 	interceptor     *middleware.UnifiedInterceptor
+	errorHandler    *errors.ErrorHandler
 }
 
 type WorkerPool struct {
@@ -114,25 +113,8 @@ func (m *Message) Command() string {
 		return ""
 	}
 
-	command := parts[0][1:] // Remove the '/' prefix
+	command := parts[0][1:]
 	return command
-}
-
-// Implement interfaces for middleware
-func (m *Message) GetUserID() int64 {
-	return m.UserID
-}
-
-func (m *Message) GetChatID() int64 {
-	return m.ChatID
-}
-
-func (m *Message) GetCommand() string {
-	return m.Command()
-}
-
-func (m *Message) GetText() string {
-	return m.Text
 }
 
 type Job struct {
@@ -143,8 +125,9 @@ type Job struct {
 }
 
 func NewBot(botAPI BotAPI, financeService FinanceService, currencyService CurrencyService) *Bot {
-	interceptor := middleware.NewUnifiedInterceptor(middleware.DefaultConfig("fiat-formaggio-bot"))
-	
+	interceptor := middleware.NewUnifiedInterceptor(middleware.DefaultConfig(domain.AppName + "-bot"))
+	errorHandler := errors.DefaultErrorHandler()
+
 	return &Bot{
 		botAPI:          botAPI,
 		financeService:  financeService,
@@ -152,6 +135,7 @@ func NewBot(botAPI BotAPI, financeService FinanceService, currencyService Curren
 		workerPool:      NewWorkerPool(DefaultWorkerPoolSize),
 		sessionManager:  NewUserSessionManager(),
 		interceptor:     interceptor,
+		errorHandler:    errorHandler,
 	}
 }
 
@@ -162,11 +146,9 @@ func NewBotFromToken(token string, financeService FinanceService, currencyServic
 	}
 
 	bot := NewBot(botAPI, financeService, currencyService)
-	
-	// Set up bot commands in Telegram UI
+
 	if err := bot.setupBotCommands(); err != nil {
 		log.Printf("Failed to set bot commands: %v", err)
-		// Don't fail bot creation, just log the error
 	}
 
 	return bot, nil
@@ -197,8 +179,7 @@ func (b *Bot) Start(ctx context.Context) error {
 				Text:     update.Message.Text,
 			}
 
-			// Create a root span for this message processing
-			tracer := otel.Tracer("fiat-formaggio")
+			tracer := otel.Tracer(domain.AppName)
 			msgCtx, span := tracer.Start(ctx, "Bot.ProcessTelegramMessage")
 			span.SetAttributes(
 				attribute.Int64("user.id", msg.UserID),
@@ -210,7 +191,7 @@ func (b *Bot) Start(ctx context.Context) error {
 				ctx:     msgCtx,
 				message: msg,
 				bot:     b,
-				span:    span, // Store span to end it after processing
+				span:    span,
 			}
 
 			select {
@@ -235,16 +216,21 @@ func (b *Bot) sendMessage(chatID int64, text string) {
 	}
 }
 
+func (b *Bot) sendErrorMessage(ctx context.Context, chatID int64, err error, operation string) {
+	userMsg := b.errorHandler.Handle(ctx, err, operation)
+	if userMsg != "" {
+		b.sendMessage(chatID, userMsg)
+	}
+}
+
 func (b *Bot) handleMessage(ctx context.Context, message *Message) {
-	// Define the core message processing logic
 	handler := func(ctx context.Context, msg interface{}) error {
 		if message, ok := msg.(*Message); ok {
 			b.processMessage(ctx, message)
 		}
 		return nil
 	}
-	
-	// Wrap with unified middleware (tracing, metrics, profiling, recovery)
+
 	middlewareHandler := func(ctx context.Context, input interface{}) (interface{}, error) {
 		return nil, handler(ctx, input)
 	}
@@ -313,15 +299,14 @@ func (b *Bot) processMessage(ctx context.Context, message *Message) {
 func (b *Bot) startSession(ctx context.Context, msg *Message, sessionType SessionType) {
 	userID := domain.UserId(msg.UserID)
 	chatID := msg.ChatID
-	
-	// Use unified interceptor for session operations
+
 	sessionHandler := func(ctx context.Context, input interface{}) (interface{}, error) {
 		b.createAndStartSession(ctx, userID, chatID, msg, sessionType)
 		return nil, nil
 	}
 	wrappedHandler := b.interceptor.Chain(sessionHandler, "Bot.startSession")
 	_, err := wrappedHandler(ctx, msg)
-	
+
 	if err != nil {
 		log.Printf("Error starting session: %v", err)
 	}
@@ -330,27 +315,25 @@ func (b *Bot) startSession(ctx context.Context, msg *Message, sessionType Sessio
 func (b *Bot) createAndStartSession(ctx context.Context, userID domain.UserId, chatID int64, msg *Message, sessionType SessionType) {
 	session, err := b.sessionManager.StartSession(userID, chatID, sessionType)
 	if err != nil {
-		b.sendMessage(chatID, fmt.Sprintf("❌ Не удалось начать сессию: %s", err.Error()))
+		b.sendErrorMessage(ctx, chatID, err, "start_session")
 		return
 	}
-	
+
 	metrics.IncrementActiveSessions()
 
 	if err := session.Handler.HandleStep(ctx, b, session, msg); err != nil {
-		b.sendMessage(chatID, fmt.Sprintf("❌ Ошибка: %s", err.Error()))
+		b.sendErrorMessage(ctx, chatID, err, "session_step")
 		b.sessionManager.ClearSession(userID)
 	}
 }
 
 func (b *Bot) handleSessionMessage(ctx context.Context, msg *Message, session *UserSession) {
-	// Create session message handler
 	handler := func(ctx context.Context, message interface{}) error {
 		b.sessionManager.UpdateLastActivity(session.UserID)
 		b.processSessionMessage(ctx, msg, session)
 		return nil
 	}
-	
-	// Use unified interceptor for session handling
+
 	middlewareHandler := func(ctx context.Context, input interface{}) (interface{}, error) {
 		return nil, handler(ctx, input)
 	}
@@ -415,7 +398,6 @@ func (wp *WorkerPool) worker(ctx context.Context, workerID int64) {
 				return
 			}
 
-			// Process the message and end the span
 			job.bot.handleMessage(job.ctx, job.message)
 			job.span.End()
 		}

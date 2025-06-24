@@ -5,32 +5,33 @@ import (
 	"fmt"
 	"github.com/aniats/FiatFormaggio/internal/domain"
 	"log"
-
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
 )
 
-
 func (b *Bot) sendCashHoldingsCommand(ctx context.Context, chatID int64, userID domain.UserId) {
-	tracer := otel.Tracer("fiat-formaggio")
-	ctx, span := tracer.Start(ctx, "Bot.sendCashHoldingsCommand")
-	defer span.End()
+	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
+		return b.processCashHoldingsCommand(ctx, chatID, userID)
+	}
 
-	span.SetAttributes(
-		attribute.Int64("user.id", int64(userID)),
-		attribute.Int64("chat.id", chatID),
-	)
+	params := map[string]interface{}{
+		"user_id": int64(userID),
+		"chat_id": chatID,
+	}
 
+	wrappedHandler := b.interceptor.Chain(handler, "Bot.sendCashHoldingsCommand")
+	_, _ = wrappedHandler(ctx, params)
+}
+
+func (b *Bot) processCashHoldingsCommand(ctx context.Context, chatID int64, userID domain.UserId) (interface{}, error) {
 	holdings, err := b.financeService.GetCashHoldingsByUserID(ctx, userID)
 	if err != nil {
 		log.Printf("Ошибка при получении наличных счетов для пользователя %s: %v", FormatInteger(int64(userID)), err)
 		b.sendMessage(chatID, "❌ Ошибка при получении наличных счетов. Попробуйте позже.")
-		return
+		return nil, err
 	}
 
 	if len(holdings) == 0 {
 		b.sendMessage(chatID, "📭 У вас пока нет сохраненных наличных счетов.\n\nСоздайте первый счет: /create_cash_holding")
-		return
+		return nil, nil
 	}
 
 	text := "💵 Ваши наличные счета:\n\n"
@@ -45,5 +46,5 @@ func (b *Bot) sendCashHoldingsCommand(ctx context.Context, chatID int64, userID 
 	text += fmt.Sprintf("📊 Всего счетов: %s", FormatInteger(int64(len(holdings))))
 
 	b.sendMessage(chatID, text)
+	return nil, nil
 }
-

@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/aniats/FiatFormaggio/internal/app"
 	"github.com/aniats/FiatFormaggio/internal/domain"
+	"github.com/aniats/FiatFormaggio/internal/errors"
 	"github.com/aniats/FiatFormaggio/internal/metrics"
 	"github.com/aniats/FiatFormaggio/internal/repository"
 	"github.com/aniats/FiatFormaggio/internal/repository/postgres"
@@ -59,7 +59,7 @@ func run() error {
 
 	application, err := NewApplication(config)
 	if err != nil {
-		return fmt.Errorf("failed to create application: %w", err)
+		return errors.WrapConfigError(err)
 	}
 	defer application.Cleanup()
 
@@ -67,7 +67,7 @@ func run() error {
 	defer cancel()
 
 	if err := application.Start(ctx); err != nil {
-		return fmt.Errorf("failed to start application: %w", err)
+		return errors.WrapServiceError(err)
 	}
 
 	return application.WaitForShutdown()
@@ -79,19 +79,19 @@ func NewApplication(config *Config) (*Application, error) {
 	}
 
 	if err := app.initTracing(); err != nil {
-		return nil, fmt.Errorf("failed to initialize tracing: %w", err)
+		return nil, errors.WrapConfigError(err)
 	}
 
 	if err := app.initRepository(); err != nil {
-		return nil, fmt.Errorf("failed to initialize repository: %w", err)
+		return nil, errors.WrapDatabaseError(err)
 	}
 
 	if err := app.initServices(); err != nil {
-		return nil, fmt.Errorf("failed to initialize services: %w", err)
+		return nil, errors.WrapServiceError(err)
 	}
 
 	if err := app.initBot(); err != nil {
-		return nil, fmt.Errorf("failed to initialize bot: %w", err)
+		return nil, errors.WrapServiceError(err)
 	}
 
 	log.Println("✅ Application initialized successfully")
@@ -100,7 +100,7 @@ func NewApplication(config *Config) (*Application, error) {
 
 func (a *Application) Start(ctx context.Context) error {
 	if err := a.currencyService.Start(ctx); err != nil {
-		return fmt.Errorf("failed to start currency service: %w", err)
+		return errors.WrapServiceError(err)
 	}
 
 	if err := a.testServices(ctx); err != nil {
@@ -151,7 +151,6 @@ func (a *Application) Cleanup() {
 	log.Println("✅ Application cleanup completed")
 }
 
-// initTracing initializes distributed tracing
 func (a *Application) initTracing() error {
 	cleanup, err := app.InitTracing()
 	if err != nil {
@@ -162,24 +161,24 @@ func (a *Application) initTracing() error {
 }
 
 func (a *Application) initRepository() error {
-	tracer := otel.Tracer("fiat-formaggio")
+	tracer := otel.Tracer(domain.AppName)
 	ctx, span := tracer.Start(context.Background(), "Application.initRepository")
 	defer span.End()
 
 	if a.config.DatabaseURL == "" {
-		return fmt.Errorf("DATABASE_URL environment variable is required")
+		return errors.NewTechnicalError(errors.CodeConfigError, "DATABASE_URL environment variable is required")
 	}
 
 	repo, err := postgres.New(a.config.DatabaseURL)
 	if err != nil {
-		return fmt.Errorf("failed to create repository: %w", err)
+		return errors.WrapDatabaseError(err)
 	}
 
 	healthCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	if err := repo.HealthCheck(healthCtx); err != nil {
-		return fmt.Errorf("repository health check failed: %w", err)
+		return errors.WrapDatabaseError(err)
 	}
 
 	a.repository = repo
@@ -205,12 +204,12 @@ func (a *Application) initServices() error {
 
 func (a *Application) initBot() error {
 	if a.config.TelegramBotToken == "" {
-		return fmt.Errorf("TELEGRAM_BOT_TOKEN environment variable is required")
+		return errors.NewTechnicalError(errors.CodeConfigError, "TELEGRAM_BOT_TOKEN environment variable is required")
 	}
 
 	bot, err := app.NewBotFromToken(a.config.TelegramBotToken, a.financeService, a.currencyService)
 	if err != nil {
-		return fmt.Errorf("failed to create bot: %w", err)
+		return errors.WrapServiceError(err)
 	}
 
 	a.bot = bot
@@ -219,14 +218,14 @@ func (a *Application) initBot() error {
 }
 
 func (a *Application) testServices(ctx context.Context) error {
-	tracer := otel.Tracer("fiat-formaggio")
+	tracer := otel.Tracer(domain.AppName)
 	ctx, span := tracer.Start(ctx, "Application.testServices")
 	defer span.End()
 
 	userID := domain.UserId(123456789)
 	deposits, err := a.financeService.GetDepositsByUserID(ctx, userID)
 	if err != nil {
-		return fmt.Errorf("failed to get deposits: %w", err)
+		return errors.WrapServiceError(err)
 	}
 	log.Printf("✅ Successfully retrieved %s deposits for user %s",
 		app.FormatInteger(int64(len(deposits))),
@@ -234,7 +233,7 @@ func (a *Application) testServices(ctx context.Context) error {
 
 	rates, err := a.currencyService.GetCurrencyRates(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get currency rates: %w", err)
+		return errors.WrapServiceError(err)
 	}
 	log.Printf("✅ Successfully retrieved cached currency rates: %s currencies",
 		app.FormatInteger(int64(len(rates))))

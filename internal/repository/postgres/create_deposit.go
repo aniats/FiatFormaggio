@@ -2,8 +2,10 @@ package postgres
 
 import (
 	"context"
-	"fmt"
+	"time"
+
 	"github.com/aniats/FiatFormaggio/internal/domain"
+	"github.com/aniats/FiatFormaggio/internal/errors"
 )
 
 func (repo *Repository) CreateDeposit(ctx context.Context, deposit *domain.Deposit) error {
@@ -17,9 +19,14 @@ func (repo *Repository) CreateDeposit(ctx context.Context, deposit *domain.Depos
 				expiration_date, 
 				currency
 			) VALUES ($1, $2, $3, $4, $5, $6)
+			RETURNING id, expiration_date, created_at, updated_at
 		`
 
-		_, err := repo.db.ExecContext(
+		var id int64
+		var expirationDate *time.Time
+		var createdAt, updatedAt time.Time
+
+		err := repo.db.QueryRowContext(
 			ctx,
 			query,
 			deposit.UserId,
@@ -28,11 +35,15 @@ func (repo *Repository) CreateDeposit(ctx context.Context, deposit *domain.Depos
 			deposit.InterestRateBasisPoints,
 			deposit.ExpirationDate,
 			deposit.Currency,
-		)
+		).Scan(&id, &expirationDate, &createdAt, &updatedAt)
 
 		if err != nil {
-			return nil, fmt.Errorf("failed to create deposit: %w", err)
+			return nil, errors.WrapRepositoryError(err)
 		}
+
+		// Update the deposit object with the returned values
+		deposit.Id = id
+		deposit.ExpirationDate = expirationDate
 
 		return nil, nil
 	}

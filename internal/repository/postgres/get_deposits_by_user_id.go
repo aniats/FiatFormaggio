@@ -3,8 +3,9 @@ package postgres
 import (
 	"context"
 	"database/sql"
-	"fmt"
+
 	"github.com/aniats/FiatFormaggio/internal/domain"
+	"github.com/aniats/FiatFormaggio/internal/errors"
 )
 
 func (repo *Repository) GetDepositsByUserID(ctx context.Context, userId domain.UserId) ([]domain.Deposit, error) {
@@ -24,7 +25,7 @@ func (repo *Repository) GetDepositsByUserID(ctx context.Context, userId domain.U
 
 		rows, queryErr := repo.db.QueryContext(ctx, query, userId)
 		if queryErr != nil {
-			return nil, fmt.Errorf("failed to query deposits for user %d: %w", userId, queryErr)
+			return nil, errors.WrapRepositoryError(queryErr)
 		}
 		defer rows.Close()
 
@@ -44,7 +45,7 @@ func (repo *Repository) GetDepositsByUserID(ctx context.Context, userId domain.U
 				&deposit.Currency,
 			)
 			if scanErr != nil {
-				return nil, fmt.Errorf("failed to scan deposit row: %w", scanErr)
+				return nil, errors.WrapRepositoryError(scanErr)
 			}
 
 			if expirationDate.Valid {
@@ -58,7 +59,7 @@ func (repo *Repository) GetDepositsByUserID(ctx context.Context, userId domain.U
 		}
 
 		if rowsErr := rows.Err(); rowsErr != nil {
-			return nil, fmt.Errorf("error iterating over deposit rows: %w", rowsErr)
+			return nil, errors.WrapRepositoryError(rowsErr)
 		}
 
 		return deposits, nil

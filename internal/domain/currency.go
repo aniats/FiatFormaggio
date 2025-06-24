@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/aniats/FiatFormaggio/internal/errors"
 )
 
 type CurrencyName string
@@ -179,10 +181,9 @@ func CurrencyFromHuman(human string) (CurrencyName, error) {
 		return currency, nil
 	}
 
-	return "", fmt.Errorf("неизвестная валюта: %s", human)
+	return "", errors.NewCurrencyError(human)
 }
 
-// formatNumberWithCommas adds comma separators to numbers
 func formatNumberWithCommas(num float64) string {
 	str := strconv.FormatFloat(num, 'f', 2, 64)
 	

@@ -2,20 +2,20 @@ package finance
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/aniats/FiatFormaggio/internal/domain"
+	"github.com/aniats/FiatFormaggio/internal/errors"
 )
 
 func (s *FinanceService) GetSavingAccountsByUserID(ctx context.Context, userID domain.UserId) ([]domain.SavingAccount, error) {
 	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
 		if userID <= 0 {
-			return nil, fmt.Errorf("invalid user ID: %d", userID)
+			return nil, errors.ErrInvalidUserID.WithContext("userID", userID)
 		}
 
 		accounts, err := s.repo.GetSavingAccountsByUserID(ctx, userID)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get saving accounts for user %d: %w", userID, err)
+			return nil, errors.WrapRepositoryError(err).WithContext("userID", userID)
 		}
 
 		return accounts, nil

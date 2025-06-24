@@ -10,7 +10,6 @@ func (s *FinanceService) GetDepositsByUserID(ctx context.Context, userId domain.
 	var result []domain.Deposit
 	var err error
 	
-	// Use the unified interceptor for clean tracing
 	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
 		deposits, repoErr := s.repo.GetDepositsByUserID(ctx, userId)
 		return deposits, repoErr

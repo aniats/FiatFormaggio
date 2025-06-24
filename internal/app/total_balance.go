@@ -9,7 +9,6 @@ import (
 )
 
 func (b *Bot) sendTotalBalanceCommand(ctx context.Context, chatID int64, userID domain.UserId) {
-	// Use unified interceptor for tracing and middleware
 	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
 		params := input.(map[string]interface{})
 		chatID := params["chatID"].(int64)

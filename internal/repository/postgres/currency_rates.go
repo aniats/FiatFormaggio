@@ -3,10 +3,10 @@ package postgres
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"time"
 
 	"github.com/aniats/FiatFormaggio/internal/domain"
+	"github.com/aniats/FiatFormaggio/internal/errors"
 )
 
 func (repo *Repository) UpsertCurrencyRate(ctx context.Context, rate *domain.CurrencyRate) error {
@@ -36,7 +36,7 @@ func (repo *Repository) UpsertCurrencyRate(ctx context.Context, rate *domain.Cur
 		)
 
 		if err != nil {
-			return nil, fmt.Errorf("failed to upsert currency rate: %w", err)
+			return nil, errors.WrapRepositoryError(err)
 		}
 
 		return nil, nil
@@ -62,7 +62,7 @@ func (repo *Repository) GetCurrencyRates(ctx context.Context) ([]domain.Currency
 
 		rows, err := repo.db.QueryContext(ctx, query)
 		if err != nil {
-			return nil, fmt.Errorf("failed to query currency rates: %w", err)
+			return nil, errors.WrapRepositoryError(err)
 		}
 		defer rows.Close()
 
@@ -79,14 +79,14 @@ func (repo *Repository) GetCurrencyRates(ctx context.Context) ([]domain.Currency
 				&rate.UpdatedAt,
 			)
 			if err != nil {
-				return nil, fmt.Errorf("failed to scan currency rate row: %w", err)
+				return nil, errors.WrapRepositoryError(err)
 			}
 
 			rates = append(rates, rate)
 		}
 
 		if err := rows.Err(); err != nil {
-			return nil, fmt.Errorf("error iterating over currency rate rows: %w", err)
+			return nil, errors.WrapRepositoryError(err)
 		}
 
 		return rates, nil
@@ -110,11 +110,11 @@ func (repo *Repository) GetLastUpdateTime(ctx context.Context) (*time.Time, erro
 	var lastUpdate sql.NullTime
 	err := repo.db.QueryRowContext(ctx, query).Scan(&lastUpdate)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get last update time: %w", err)
+		return nil, errors.WrapRepositoryError(err)
 	}
 
 	if !lastUpdate.Valid {
-		return nil, nil // No rates in database yet
+		return nil, nil
 	}
 
 	return &lastUpdate.Time, nil

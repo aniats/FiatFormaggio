@@ -3,13 +3,12 @@ package app
 import (
 	"context"
 	"fmt"
-	"github.com/aniats/FiatFormaggio/internal/domain"
-	"github.com/aniats/FiatFormaggio/internal/service/finance/models"
 	"strconv"
 	"strings"
 
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
+	"github.com/aniats/FiatFormaggio/internal/domain"
+	"github.com/aniats/FiatFormaggio/internal/errors"
+	"github.com/aniats/FiatFormaggio/internal/service/finance/models"
 )
 
 type BrokerageAccountCreationHandler struct{}
@@ -19,16 +18,22 @@ func (h *BrokerageAccountCreationHandler) GetSessionType() SessionType {
 }
 
 func (h *BrokerageAccountCreationHandler) HandleStep(ctx context.Context, bot *Bot, session *UserSession, msg *Message) error {
-	tracer := otel.Tracer("fiat-formaggio")
-	ctx, span := tracer.Start(ctx, "BrokerageAccountCreationHandler.HandleStep")
-	defer span.End()
+	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
+		return nil, h.processStep(ctx, bot, session, msg)
+	}
 
-	span.SetAttributes(
-		attribute.Int64("user.id", int64(session.UserID)),
-		attribute.String("session.step", string(session.CurrentStep)),
-		attribute.String("session.type", "create_brokerage_account"),
-	)
+	params := map[string]interface{}{
+		"user_id":      int64(session.UserID),
+		"session_step": string(session.CurrentStep),
+		"session_type": "create_brokerage_account",
+	}
 
+	wrappedHandler := bot.interceptor.Chain(handler, "BrokerageAccountCreationHandler.HandleStep")
+	_, err := wrappedHandler(ctx, params)
+	return err
+}
+
+func (h *BrokerageAccountCreationHandler) processStep(ctx context.Context, bot *Bot, session *UserSession, msg *Message) error {
 	switch session.CurrentStep {
 	case StepStart:
 		return h.handleStart(bot, session)
@@ -45,7 +50,7 @@ func (h *BrokerageAccountCreationHandler) HandleStep(ctx context.Context, bot *B
 	case StepConfirmation:
 		return h.handleConfirmation(ctx, bot, session, msg.Text)
 	default:
-		return fmt.Errorf("неизвестный шаг: %s", session.CurrentStep)
+		return errors.ErrUnknownStep.WithContext("step", session.CurrentStep)
 	}
 }
 
@@ -130,7 +135,7 @@ func (h *BrokerageAccountCreationHandler) handleAmount(bot *Bot, session *UserSe
 func (h *BrokerageAccountCreationHandler) handleCurrency(bot *Bot, session *UserSession, input string) error {
 	currencyStr := strings.TrimSpace(input)
 
-	if strings.ToLower(currencyStr) == "пропустить" || currencyStr == "" {
+	if IsSkipResponse(currencyStr) || currencyStr == "" {
 		session.SetData("currency", domain.RUB)
 		session.CurrentStep = StepAccount
 		h.sendBrokerPrompt(bot, session)
@@ -182,7 +187,7 @@ func (h *BrokerageAccountCreationHandler) handleBroker(bot *Bot, session *UserSe
 	brokerInput := strings.TrimSpace(input)
 
 	var broker *string
-	if strings.ToLower(brokerInput) == "пропустить" || brokerInput == "" {
+	if IsSkipResponse(brokerInput) || brokerInput == "" {
 		broker = nil
 	} else {
 		if len(brokerInput) > 255 {
@@ -214,7 +219,7 @@ func (h *BrokerageAccountCreationHandler) handleAccountType(bot *Bot, session *U
 	accountTypeStr := strings.TrimSpace(input)
 
 	var accountType domain.BrokerageType
-	if strings.ToLower(accountTypeStr) == "пропустить" || accountTypeStr == "" {
+	if IsSkipResponse(accountTypeStr) || accountTypeStr == "" {
 		accountType = domain.Regular
 	} else {
 		var err error
@@ -257,7 +262,7 @@ func (h *BrokerageAccountCreationHandler) parseAccountType(input string) (domain
 	case "margin", "маржинальный":
 		return domain.Margin, nil
 	default:
-		return "", fmt.Errorf("неподдерживаемый тип счета: %s", input)
+		return "", errors.ErrUnsupportedAccountType.WithContext("accountType", input)
 	}
 }
 
@@ -312,34 +317,43 @@ func (h *BrokerageAccountCreationHandler) formatAccountType(accountType domain.B
 }
 
 func (h *BrokerageAccountCreationHandler) handleConfirmation(ctx context.Context, bot *Bot, session *UserSession, input string) error {
-	response := strings.ToLower(strings.TrimSpace(input))
-
-	if response == "нет" || response == "отмена" {
+	if IsNegativeResponse(input) {
 		bot.sessionManager.ClearSession(session.UserID)
 		bot.sendMessage(session.ChatID, "❌ Создание брокерского счета отменено.")
 		return nil
 	}
 
-	if response != "да" && response != "yes" && response != "подтверждаю" {
-		bot.sendMessage(session.ChatID, "Пожалуйста, ответьте 'да' для подтверждения или 'нет' для отмены:")
+	if !IsPositiveResponse(input) {
+		if IsValidResponse(input) {
+			bot.sendMessage(session.ChatID, "Пожалуйста, ответьте 'да' для подтверждения или 'нет' для отмены:")
+		} else {
+			bot.sendMessage(session.ChatID, GetSuggestionMessage())
+		}
 		return nil
 	}
 
-	// Prevent double execution by clearing session first
 	bot.sessionManager.ClearSession(session.UserID)
 	return h.CompleteSession(ctx, bot, session)
 }
 
 func (h *BrokerageAccountCreationHandler) CompleteSession(ctx context.Context, bot *Bot, session *UserSession) error {
-	tracer := otel.Tracer("fiat-formaggio")
-	ctx, span := tracer.Start(ctx, "BrokerageAccountCreationHandler.CompleteSession")
-	defer span.End()
+	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
+		return nil, h.executeCompletion(ctx, bot, session)
+	}
 
 	name := session.GetData("name").(string)
-	span.SetAttributes(
-		attribute.Int64("user.id", int64(session.UserID)),
-		attribute.String("brokerage_account.name", name),
-	)
+	params := map[string]interface{}{
+		"user_id":                int64(session.UserID),
+		"brokerage_account_name": name,
+	}
+
+	wrappedHandler := bot.interceptor.Chain(handler, "BrokerageAccountCreationHandler.CompleteSession")
+	_, err := wrappedHandler(ctx, params)
+	return err
+}
+
+func (h *BrokerageAccountCreationHandler) executeCompletion(ctx context.Context, bot *Bot, session *UserSession) error {
+	name := session.GetData("name").(string)
 	amount := session.GetData("amount").(float64)
 	currency := session.GetData("currency").(domain.CurrencyName)
 	broker := session.GetData("broker").(*string)
@@ -367,16 +381,18 @@ func (h *BrokerageAccountCreationHandler) CompleteSession(ctx context.Context, b
 
 	text := fmt.Sprintf(`✅ Брокерский счет успешно создан!
 
-	📝 Название: %s
-	💰 Сумма: %s
-	🏦 Брокер: %s
-	📊 Тип: %s
-
-	Используйте /brokerage_accounts чтобы посмотреть все ваши брокерские счета.`,
+		📝 Название: %s
+		💰 Сумма: %s
+		🏦 Брокер: %s
+		📊 Тип: %s
+		🆔 ID: %s
+		
+		Используйте /brokerage_accounts чтобы посмотреть все ваши брокерские счета.`,
 		account.Name,
 		currency.FormatAmountRussian(amount),
 		brokerText,
-		h.formatAccountType(account.AccountType))
+		h.formatAccountType(account.AccountType),
+		FormatInteger(int64(account.Id)))
 
 	bot.sendMessage(session.ChatID, text)
 	return nil

@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/aniats/FiatFormaggio/internal/domain"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
@@ -20,7 +21,7 @@ func InitTracing() (func(), error) {
 	
 	res, err := resource.New(ctx,
 		resource.WithAttributes(
-			semconv.ServiceNameKey.String("fiat-formaggio"),
+			semconv.ServiceNameKey.String(domain.AppName),
 			semconv.ServiceVersionKey.String("1.0.0"),
 		),
 	)
@@ -71,14 +72,12 @@ func InitTracing() (func(), error) {
 	return cleanup, nil
 }
 
-const tracerName = "fiat-formaggio"
+var tracerName = domain.AppName
 
-// TraceOptions holds optional attributes for tracing
 type TraceOptions struct {
 	Attributes []attribute.KeyValue
 }
 
-// TraceAttribute creates a key-value attribute for tracing
 func TraceAttribute(key string, value interface{}) attribute.KeyValue {
 	switch v := value.(type) {
 	case string:
@@ -94,13 +93,10 @@ func TraceAttribute(key string, value interface{}) attribute.KeyValue {
 	}
 }
 
-// WithTrace wraps a function with OpenTelemetry tracing
 func WithTrace(ctx context.Context, operationName string, fn func(ctx context.Context) error, opts ...TraceOptions) error {
 	tracer := otel.Tracer(tracerName)
 	ctx, span := tracer.Start(ctx, operationName)
 	defer span.End()
-
-	// Add attributes if provided
 	if len(opts) > 0 && len(opts[0].Attributes) > 0 {
 		span.SetAttributes(opts[0].Attributes...)
 	}
@@ -108,13 +104,10 @@ func WithTrace(ctx context.Context, operationName string, fn func(ctx context.Co
 	return fn(ctx)
 }
 
-// WithTraceFunc wraps a function with return value and OpenTelemetry tracing
 func WithTraceFunc[T any](ctx context.Context, operationName string, fn func(ctx context.Context) (T, error), opts ...TraceOptions) (T, error) {
 	tracer := otel.Tracer(tracerName)
 	ctx, span := tracer.Start(ctx, operationName)
 	defer span.End()
-
-	// Add attributes if provided
 	if len(opts) > 0 && len(opts[0].Attributes) > 0 {
 		span.SetAttributes(opts[0].Attributes...)
 	}
@@ -122,13 +115,10 @@ func WithTraceFunc[T any](ctx context.Context, operationName string, fn func(ctx
 	return fn(ctx)
 }
 
-// WithTraceNoError wraps a function with no error return and OpenTelemetry tracing
 func WithTraceNoError(ctx context.Context, operationName string, fn func(ctx context.Context), opts ...TraceOptions) {
 	tracer := otel.Tracer(tracerName)
 	ctx, span := tracer.Start(ctx, operationName)
 	defer span.End()
-
-	// Add attributes if provided
 	if len(opts) > 0 && len(opts[0].Attributes) > 0 {
 		span.SetAttributes(opts[0].Attributes...)
 	}
@@ -136,7 +126,6 @@ func WithTraceNoError(ctx context.Context, operationName string, fn func(ctx con
 	fn(ctx)
 }
 
-// SetSpanAttributes is a helper to add attributes to the current span
 func SetSpanAttributes(ctx context.Context, attrs ...attribute.KeyValue) {
 	span := otelTrace.SpanFromContext(ctx)
 	if span != nil {

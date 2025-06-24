@@ -3,9 +3,9 @@ package postgres
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"time"
 
+	"github.com/aniats/FiatFormaggio/internal/errors"
 	"github.com/aniats/FiatFormaggio/internal/middleware"
 	"github.com/aniats/FiatFormaggio/internal/repository"
 	_ "github.com/lib/pq"
@@ -19,17 +19,16 @@ type Repository struct {
 func New(connString string) (*Repository, error) {
 	db, err := sql.Open("postgres", connString)
 	if err != nil {
-		return nil, fmt.Errorf("couldn't establish a successful connection to database: %v", err)
+		return nil, errors.WrapDatabaseError(err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	if err := db.PingContext(ctx); err != nil {
-		return nil, fmt.Errorf("couldn't ping: %v", err)
+		return nil, errors.WrapDatabaseError(err)
 	}
 
-	// Create interceptor and wrap database with SQL profiling
 	interceptor := middleware.NewUnifiedInterceptor(middleware.DefaultConfig("Repository"))
 	profiledDB := middleware.ProfileDatabase(db, true, true, 10*time.Millisecond)
 
@@ -47,5 +46,4 @@ func (repo *Repository) HealthCheck(ctx context.Context) error {
 	return repo.db.PingContext(ctx)
 }
 
-// Compile-time check to ensure Repository implements repository.Repository interface
 var _ repository.Repository = (*Repository)(nil)
