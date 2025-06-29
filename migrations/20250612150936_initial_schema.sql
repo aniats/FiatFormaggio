@@ -47,15 +47,12 @@ INSERT INTO currency_minor_units VALUES
                                      ('KZT', 'tiyn', 100, '₸', 'Kazakhstani Tenge');
 
 CREATE TABLE users (
-                       id BIGINT PRIMARY KEY,  -- Telegram user ID
-                       username VARCHAR(255),  -- Telegram username (optional)
+                       id BIGINT PRIMARY KEY,
+                       username VARCHAR(255),
                        first_name VARCHAR(255),
                        last_name VARCHAR(255),
-                       language_code VARCHAR(10) DEFAULT 'ru',
-                       timezone VARCHAR(50) DEFAULT 'UTC',
                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                       is_active BOOLEAN DEFAULT true
+                       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE saving_accounts (

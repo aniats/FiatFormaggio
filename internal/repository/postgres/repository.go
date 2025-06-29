@@ -44,10 +44,6 @@ func (repo *Repository) HealthCheck(ctx context.Context) error {
 	return repo.db.HealthCheck(ctx)
 }
 
-func (repo *Repository) CreateUser(ctx context.Context, user *domain.User) error {
-	return repo.User.CreateUser(ctx, user)
-}
-
 func (repo *Repository) EnsureUserExists(ctx context.Context, userID domain.UserId, username string) (bool, error) {
 	return repo.User.EnsureUserExists(ctx, userID, username)
 }

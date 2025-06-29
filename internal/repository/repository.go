@@ -7,7 +7,6 @@ import (
 )
 
 type UserRepository interface {
-	CreateUser(ctx context.Context, user *domain.User) error
 	EnsureUserExists(ctx context.Context, userID domain.UserId, username string) (bool, error)
 }
 

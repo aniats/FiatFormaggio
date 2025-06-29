@@ -2,12 +2,12 @@
 -- +goose StatementBegin
 
 -- Insert test users (using realistic Telegram user IDs)
-INSERT INTO users (id, username, first_name, last_name, language_code, timezone, is_active) VALUES
-                                                                                                (123456789, 'anna_trader', 'Anna', 'Tselikova', 'en', 'Europe/Zurich', true),
-                                                                                                (987654321, 'crypto_bob', 'Bob', 'Johnson', 'en', 'America/New_York', true),
-                                                                                                (555666777, 'maria_investor', 'Maria', 'Garcia', 'es', 'Europe/Madrid', true),
-                                                                                                (111222333, 'test_user', 'Test', 'User', 'ru', 'Europe/Moscow', true),
-                                                                                                (444555666, 'inactive_user', 'Inactive', 'Account', 'en', 'UTC', false);
+INSERT INTO users (id, username, first_name, last_name) VALUES
+                                                            (123456789, 'anna_trader', 'Anna', 'Tselikova'),
+                                                            (987654321, 'crypto_bob', 'Bob', 'Johnson'),
+                                                            (555666777, 'maria_investor', 'Maria', 'Garcia'),
+                                                            (111222333, 'test_user', 'Test', 'User'),
+                                                            (444555666, 'inactive_user', 'Inactive', 'Account');
 
 -- Insert currency rates (current approximate rates in minor units)
 -- Base currency is RUB, so rates show how many kopecks = 1 unit of foreign currency

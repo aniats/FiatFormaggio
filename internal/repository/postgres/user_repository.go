@@ -16,38 +16,6 @@ func NewUserRepository(db *Database) *UserRepository {
 	return &UserRepository{Database: db}
 }
 
-func (r *UserRepository) CreateUser(ctx context.Context, user *domain.User) error {
-	query := `
-        INSERT INTO users (
-            id, 
-            username, 
-            first_name, 
-            last_name, 
-            language_code, 
-            timezone, 
-            is_active
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-	`
-
-	_, err := r.DB.ExecContext(
-		ctx,
-		query,
-		user.UserId,
-		user.Username,
-		user.FirstName,
-		user.LastName,
-		user.LanguageCode,
-		user.Timezone,
-		user.IsActive,
-	)
-
-	if err != nil {
-		return errors.WrapRepositoryError(err)
-	}
-
-	return nil
-}
-
 func (r *UserRepository) EnsureUserExists(ctx context.Context, userID domain.UserId, username string) (bool, error) {
 	var exists bool
 	checkQuery := `SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)`
