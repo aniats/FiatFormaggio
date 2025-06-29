@@ -1,12 +1,9 @@
 package errors
 
 const (
-	// Technical error codes
 	CodeDatabaseError    = "DB_ERROR"
 	CodeExternalAPIError = "EXT_API_ERROR"
 	CodeInternalError    = "INTERNAL_ERROR"
-	CodeNetworkError     = "NETWORK_ERROR"
-	CodeTimeoutError     = "TIMEOUT_ERROR"
 	CodeValidationError  = "VALIDATION_ERROR"
 	CodeRepositoryError  = "REPOSITORY_ERROR"
 	CodeServiceError     = "SERVICE_ERROR"
@@ -15,13 +12,10 @@ const (
 	CodeUnknownStep      = "UNKNOWN_STEP"
 	CodeParseError       = "PARSE_ERROR"
 
-	// Business logic error codes
 	CodeInvalidAmount   = "INVALID_AMOUNT"
 	CodeInvalidCurrency = "INVALID_CURRENCY"
 	CodeInvalidName     = "INVALID_NAME"
 	CodeInvalidInput    = "INVALID_INPUT"
-	CodeInvalidDate     = "INVALID_DATE"
-	CodeInvalidRate     = "INVALID_RATE"
 	CodeAmountTooLarge  = "AMOUNT_TOO_LARGE"
 	CodeAmountTooSmall  = "AMOUNT_TOO_SMALL"
 	CodeNameTooLong     = "NAME_TOO_LONG"

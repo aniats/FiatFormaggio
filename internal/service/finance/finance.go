@@ -17,8 +17,8 @@ type FinanceService struct {
 	interceptor     *middleware.UnifiedInterceptor
 }
 
-func NewFinanceService(repo repository.Repository, currencyService CurrencyService) *FinanceService {
-	interceptor := middleware.NewUnifiedInterceptor(middleware.DefaultConfig("FinanceService"))
+func NewFinanceService(repo repository.Repository, currencyService CurrencyService, appName string) *FinanceService {
+	interceptor := middleware.NewUnifiedInterceptor(middleware.DefaultConfig("FinanceService"), appName)
 	
 	return &FinanceService{
 		repo:            repo,

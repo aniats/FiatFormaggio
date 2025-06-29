@@ -34,12 +34,13 @@ type CachedCurrencyService struct {
 func NewCachedCurrencyService(
 	repo repository.CurrencyRateRepository,
 	externalService ExternalCurrencyService,
+	appName string,
 ) *CachedCurrencyService {
 	return &CachedCurrencyService{
 		repo:            repo,
 		externalService: externalService,
 		stopChan:        make(chan struct{}),
-		interceptor:     middleware.NewUnifiedInterceptor(middleware.DefaultConfig("CurrencyService")),
+		interceptor:     middleware.NewUnifiedInterceptor(middleware.DefaultConfig("CurrencyService"), appName),
 	}
 }
 

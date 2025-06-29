@@ -225,7 +225,7 @@ func (h *SavingAccountCreationHandler) sendExpirationDatePrompt(bot *Bot, sessio
 	text := fmt.Sprintf(`✅ Процентная ставка: %s
 
 	Шаг 5/6: Введите дату окончания действия счета (необязательно)
-	Форматы: 31.12.2025, 2025-12-31, 
+	Форматы: 31.12.2025, 2025-12-31, 31/12/2025 
 	
 	Введите "пропустить" если не хотите указывать дату`, rateText)
 
@@ -233,62 +233,15 @@ func (h *SavingAccountCreationHandler) sendExpirationDatePrompt(bot *Bot, sessio
 }
 
 func (h *SavingAccountCreationHandler) handleExpirationDate(bot *Bot, session *UserSession, input string) error {
-	dateStr := strings.TrimSpace(input)
-
-	if IsSkipResponse(dateStr) || dateStr == "" {
-		session.SetData("expirationDate", nil)
-		session.CurrentStep = StepConfirmation
-		h.sendConfirmation(bot, session)
-		return nil
+	handler := ExpirationDateHandler{
+		DataKey:        "expirationDate",
+		NextStep:       StepConfirmation,
+		ConfirmationFn: h.sendConfirmation,
+		StoreAsPointer: true,
 	}
-
-	date, err := h.parseDate(dateStr)
-	if err != nil {
-		bot.sendMessage(session.ChatID, "❌ Некорректная дата. Используйте формат: 31.12.2025 или 2025-12-31:")
-		return nil
-	}
-
-	if err := h.validateDate(date); err != nil {
-		bot.sendMessage(session.ChatID, fmt.Sprintf("❌ %s Попробуйте еще раз:", err.Error()))
-		return nil
-	}
-
-	session.SetData("expirationDate", date)
-	session.CurrentStep = StepConfirmation
-
-	h.sendConfirmation(bot, session)
-	return nil
+	return HandleExpirationDate(bot, session, input, handler)
 }
 
-func (h *SavingAccountCreationHandler) parseDate(input string) (*time.Time, error) {
-	formats := []string{
-		"02.01.2006",
-		"2006-01-02",
-		"02/01/2006",
-		"01/02/2006",
-	}
-
-	for _, format := range formats {
-		if date, err := time.Parse(format, input); err == nil {
-			return &date, nil
-		}
-	}
-
-	return nil, errors.ErrInvalidDateFormat
-}
-
-func (h *SavingAccountCreationHandler) validateDate(date *time.Time) error {
-	if date.Before(time.Now()) {
-		return errors.ErrDateInPast
-	}
-
-	maxDate := time.Now().AddDate(10, 0, 0)
-	if date.After(maxDate) {
-		return errors.ErrDateTooFar
-	}
-
-	return nil
-}
 
 func (h *SavingAccountCreationHandler) sendConfirmation(bot *Bot, session *UserSession) {
 	name := session.GetData("name").(string)
@@ -315,13 +268,13 @@ func (h *SavingAccountCreationHandler) sendConfirmation(bot *Bot, session *UserS
 
 	text := fmt.Sprintf(`💰 Подтверждение создания накопительного счета
 
-	📝 Название: %s
-	💰 Сумма: %s
-	💱 Валюта: %s (%s)
-	📈 Процентная ставка: %s
-	📅 Дата окончания: %s
-
-	Все верно? Отправьте "да" для создания счета или "нет" для отмены.`,
+		📝 Название: %s
+		💰 Сумма: %s
+		💱 Валюта: %s (%s)
+		📈 Процентная ставка: %s
+		📅 Дата окончания: %s
+	
+		Все верно? Отправьте "да" для создания счета или "нет" для отмены.`,
 		name,
 		currency.FormatAmountRussian(amount),
 		currency.ToHumanRussian(),
@@ -411,13 +364,13 @@ func (h *SavingAccountCreationHandler) executeCompletion(ctx context.Context, bo
 
 	text := fmt.Sprintf(`✅ Накопительный счет успешно создан!
 
-📝 Название: %s
-💰 Сумма: %s
-📈 Процентная ставка: %s
-📅 Дата окончания: %s
-🆔 ID: %s
-
-Используйте /saving_accounts чтобы посмотреть все ваши накопительные счета.`,
+		📝 Название: %s
+		💰 Сумма: %s
+		📈 Процентная ставка: %s
+		📅 Дата окончания: %s
+		🆔 ID: %s
+		
+		Используйте /saving_accounts чтобы посмотреть все ваши накопительные счета.`,
 		account.Name,
 		currency.FormatAmountRussian(amount),
 		rateText,

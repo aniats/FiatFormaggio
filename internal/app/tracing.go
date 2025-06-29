@@ -5,23 +5,20 @@ import (
 	"log"
 	"os"
 
-	"github.com/aniats/FiatFormaggio/internal/domain"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
-	otelTrace "go.opentelemetry.io/otel/trace"
 )
 
-func InitTracing() (func(), error) {
+func InitTracing(appName string) (func(), error) {
 	ctx := context.Background()
-	
+
 	res, err := resource.New(ctx,
 		resource.WithAttributes(
-			semconv.ServiceNameKey.String(domain.AppName),
+			semconv.ServiceNameKey.String(appName),
 			semconv.ServiceVersionKey.String("1.0.0"),
 		),
 	)
@@ -31,7 +28,7 @@ func InitTracing() (func(), error) {
 
 	var exporter trace.SpanExporter
 	jaegerEndpoint := os.Getenv("JAEGER_ENDPOINT")
-	
+
 	if jaegerEndpoint != "" {
 		exporter, err = otlptracehttp.New(ctx,
 			otlptracehttp.WithEndpoint(jaegerEndpoint),
@@ -70,65 +67,4 @@ func InitTracing() (func(), error) {
 	}
 
 	return cleanup, nil
-}
-
-var tracerName = domain.AppName
-
-type TraceOptions struct {
-	Attributes []attribute.KeyValue
-}
-
-func TraceAttribute(key string, value interface{}) attribute.KeyValue {
-	switch v := value.(type) {
-	case string:
-		return attribute.String(key, v)
-	case int:
-		return attribute.Int(key, v)
-	case int64:
-		return attribute.Int64(key, v)
-	case bool:
-		return attribute.Bool(key, v)
-	default:
-		return attribute.String(key, "unknown")
-	}
-}
-
-func WithTrace(ctx context.Context, operationName string, fn func(ctx context.Context) error, opts ...TraceOptions) error {
-	tracer := otel.Tracer(tracerName)
-	ctx, span := tracer.Start(ctx, operationName)
-	defer span.End()
-	if len(opts) > 0 && len(opts[0].Attributes) > 0 {
-		span.SetAttributes(opts[0].Attributes...)
-	}
-
-	return fn(ctx)
-}
-
-func WithTraceFunc[T any](ctx context.Context, operationName string, fn func(ctx context.Context) (T, error), opts ...TraceOptions) (T, error) {
-	tracer := otel.Tracer(tracerName)
-	ctx, span := tracer.Start(ctx, operationName)
-	defer span.End()
-	if len(opts) > 0 && len(opts[0].Attributes) > 0 {
-		span.SetAttributes(opts[0].Attributes...)
-	}
-
-	return fn(ctx)
-}
-
-func WithTraceNoError(ctx context.Context, operationName string, fn func(ctx context.Context), opts ...TraceOptions) {
-	tracer := otel.Tracer(tracerName)
-	ctx, span := tracer.Start(ctx, operationName)
-	defer span.End()
-	if len(opts) > 0 && len(opts[0].Attributes) > 0 {
-		span.SetAttributes(opts[0].Attributes...)
-	}
-
-	fn(ctx)
-}
-
-func SetSpanAttributes(ctx context.Context, attrs ...attribute.KeyValue) {
-	span := otelTrace.SpanFromContext(ctx)
-	if span != nil {
-		span.SetAttributes(attrs...)
-	}
 }

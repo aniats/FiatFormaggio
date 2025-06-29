@@ -20,8 +20,8 @@ type CBRService struct {
 	interceptor *middleware.UnifiedInterceptor
 }
 
-func NewCBRService(client *http.Client) *CBRService {
-	interceptor := middleware.NewUnifiedInterceptor(middleware.DefaultConfig("CBRService"))
+func NewCBRService(client *http.Client, appName string) *CBRService {
+	interceptor := middleware.NewUnifiedInterceptor(middleware.DefaultConfig("CBRService"), appName)
 	return &CBRService{
 		client:      client,
 		interceptor: interceptor,

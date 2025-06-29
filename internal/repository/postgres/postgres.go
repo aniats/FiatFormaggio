@@ -15,7 +15,7 @@ type Database struct {
 	Interceptor *middleware.UnifiedInterceptor
 }
 
-func NewDatabase(connString string) (*Database, error) {
+func NewDatabase(connString string, appName string) (*Database, error) {
 	db, err := sql.Open("postgres", connString)
 	if err != nil {
 		return nil, errors.WrapDatabaseError(err)
@@ -28,8 +28,8 @@ func NewDatabase(connString string) (*Database, error) {
 		return nil, errors.WrapDatabaseError(err)
 	}
 
-	interceptor := middleware.NewUnifiedInterceptor(middleware.DefaultConfig("Repository"))
-	profiledDB := middleware.ProfileDatabase(db, true, true, 10*time.Millisecond)
+	interceptor := middleware.NewUnifiedInterceptor(middleware.DefaultConfig("Repository"), appName)
+	profiledDB := middleware.ProfileDatabase(db, appName, true, true, 10*time.Millisecond)
 
 	return &Database{
 		DB:          profiledDB,

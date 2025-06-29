@@ -216,7 +216,7 @@ func (h *DepositCreationHandler) sendExpirationDatePrompt(bot *Bot, session *Use
 	text := fmt.Sprintf(`✅ Процентная ставка: %s
 
 		Шаг 5/5: Введите дату окончания депозита (необязательно)
-		Форматы: 31.12.2025, 2025-12-31, 31/12/2025, 12/31/2025
+		Форматы: 31.12.2025, 2025-12-31, 31/12/2025
 		
 		Введите "пропустить" если не хотите указывать дату`, rateText)
 
@@ -224,30 +224,13 @@ func (h *DepositCreationHandler) sendExpirationDatePrompt(bot *Bot, session *Use
 }
 
 func (h *DepositCreationHandler) handleExpirationDate(bot *Bot, session *UserSession, input string) error {
-	dateStr := strings.TrimSpace(input)
-
-	if IsSkipResponse(dateStr) || dateStr == "" {
-		session.CurrentStep = StepConfirmation
-		h.sendConfirmationPrompt(bot, session)
-		return nil
+	handler := ExpirationDateHandler{
+		DataKey:        "expiration_date",
+		NextStep:       StepConfirmation,
+		ConfirmationFn: h.sendConfirmationPrompt,
+		StoreAsPointer: false,
 	}
-
-	date, err := h.parseDate(dateStr)
-	if err != nil {
-		bot.sendMessage(session.ChatID, "❌ Некорректная дата. Используйте формат: 31.12.2025 или 2025-12-31:")
-		return nil
-	}
-
-	if err := h.validateDate(date); err != nil {
-		bot.sendMessage(session.ChatID, fmt.Sprintf("❌ %s Попробуйте еще раз:", err.Error()))
-		return nil
-	}
-
-	session.SetData("expiration_date", date)
-	session.CurrentStep = StepConfirmation
-
-	h.sendConfirmationPrompt(bot, session)
-	return nil
+	return HandleExpirationDate(bot, session, input, handler)
 }
 
 func (h *DepositCreationHandler) sendConfirmationPrompt(bot *Bot, session *UserSession) {
@@ -383,16 +366,6 @@ func (h *DepositCreationHandler) validateInterestRate(rate float64) error {
 	return nil
 }
 
-func (h *DepositCreationHandler) validateDate(date time.Time) error {
-	if date.Before(time.Now()) {
-		return errors.ErrDateInPast
-	}
-	maxDate := time.Now().AddDate(10, 0, 0)
-	if date.After(maxDate) {
-		return errors.ErrDateTooFar
-	}
-	return nil
-}
 
 func (h *DepositCreationHandler) isCurrencyAllowed(currency domain.CurrencyName) bool {
 	allowed := map[domain.CurrencyName]bool{
@@ -403,23 +376,6 @@ func (h *DepositCreationHandler) isCurrencyAllowed(currency domain.CurrencyName)
 		domain.GBP: true,
 	}
 	return allowed[currency]
-}
-
-func (h *DepositCreationHandler) parseDate(dateStr string) (time.Time, error) {
-	formats := []string{
-		"2006-01-02", // YYYY-MM-DD
-		"02.01.2006", // DD.MM.YYYY
-		"02/01/2006", // DD/MM/YYYY
-		"01/02/2006", // MM/DD/YYYY
-	}
-
-	for _, format := range formats {
-		if date, err := time.Parse(format, dateStr); err == nil {
-			return date, nil
-		}
-	}
-
-	return time.Time{}, errors.ErrInvalidDateFormat
 }
 
 func (h *DepositCreationHandler) sendDepositCreatedConfirmation(bot *Bot, chatID int64, deposit *domain.Deposit) {

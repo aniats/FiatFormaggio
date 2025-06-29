@@ -19,8 +19,8 @@ type Repository struct {
 	Currency         *CurrencyRepository
 }
 
-func New(connString string) (*Repository, error) {
-	db, err := NewDatabase(connString)
+func New(connString string, appName string) (*Repository, error) {
+	db, err := NewDatabase(connString, appName)
 	if err != nil {
 		return nil, err
 	}

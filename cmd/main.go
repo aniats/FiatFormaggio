@@ -42,6 +42,7 @@ type Config struct {
 	DatabaseURL      string
 	TelegramBotToken string
 	MetricsPort      string
+	AppName          string
 }
 
 func main() {
@@ -152,7 +153,7 @@ func (a *Application) Cleanup() {
 }
 
 func (a *Application) initTracing() error {
-	cleanup, err := app.InitTracing()
+	cleanup, err := app.InitTracing(a.config.AppName)
 	if err != nil {
 		return err
 	}
@@ -161,7 +162,7 @@ func (a *Application) initTracing() error {
 }
 
 func (a *Application) initRepository() error {
-	tracer := otel.Tracer(domain.AppName)
+	tracer := otel.Tracer(a.config.AppName)
 	ctx, span := tracer.Start(context.Background(), "Application.initRepository")
 	defer span.End()
 
@@ -169,7 +170,7 @@ func (a *Application) initRepository() error {
 		return errors.NewTechnicalError(errors.CodeConfigError, "DATABASE_URL environment variable is required")
 	}
 
-	repo, err := postgres.New(a.config.DatabaseURL)
+	repo, err := postgres.New(a.config.DatabaseURL, a.config.AppName)
 	if err != nil {
 		return errors.WrapDatabaseError(err)
 	}
@@ -190,13 +191,13 @@ func (a *Application) initServices() error {
 	httpClient := &http.Client{
 		Timeout: 10 * time.Second,
 	}
-	a.cbrService = cbr.NewCBRService(httpClient)
+	a.cbrService = cbr.NewCBRService(httpClient, a.config.AppName)
 	log.Println("✅ CBR service initialized successfully")
 
-	a.currencyService = currency.NewCachedCurrencyService(a.repository, a.cbrService)
+	a.currencyService = currency.NewCachedCurrencyService(a.repository, a.cbrService, a.config.AppName)
 	log.Println("✅ Currency caching service initialized successfully")
 
-	a.financeService = finance.NewFinanceService(a.repository, a.currencyService)
+	a.financeService = finance.NewFinanceService(a.repository, a.currencyService, a.config.AppName)
 	log.Println("✅ Finance service initialized successfully")
 
 	return nil
@@ -207,7 +208,7 @@ func (a *Application) initBot() error {
 		return errors.NewTechnicalError(errors.CodeConfigError, "TELEGRAM_BOT_TOKEN environment variable is required")
 	}
 
-	bot, err := app.NewBotFromToken(a.config.TelegramBotToken, a.financeService, a.currencyService)
+	bot, err := app.NewBotFromToken(a.config.TelegramBotToken, a.financeService, a.currencyService, a.config.AppName)
 	if err != nil {
 		return errors.WrapServiceError(err)
 	}
@@ -218,7 +219,7 @@ func (a *Application) initBot() error {
 }
 
 func (a *Application) testServices(ctx context.Context) error {
-	tracer := otel.Tracer(domain.AppName)
+	tracer := otel.Tracer(a.config.AppName)
 	ctx, span := tracer.Start(ctx, "Application.testServices")
 	defer span.End()
 
@@ -254,6 +255,7 @@ func loadConfig() *Config {
 		DatabaseURL:      os.Getenv("DATABASE_URL"),
 		TelegramBotToken: os.Getenv("TELEGRAM_BOT_TOKEN"),
 		MetricsPort:      getEnvWithDefault("METRICS_PORT", ":8080"),
+		AppName:          os.Getenv("APP_NAME"),
 	}
 }
 

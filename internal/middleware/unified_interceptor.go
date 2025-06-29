@@ -6,7 +6,6 @@ import (
 	"runtime/pprof"
 	"time"
 
-	"github.com/aniats/FiatFormaggio/internal/domain"
 	"github.com/aniats/FiatFormaggio/internal/metrics"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -42,9 +41,9 @@ func DefaultConfig(serviceName string) *InterceptorConfig {
 	}
 }
 
-func NewUnifiedInterceptor(config *InterceptorConfig) *UnifiedInterceptor {
+func NewUnifiedInterceptor(config *InterceptorConfig, appName string) *UnifiedInterceptor {
 	if config == nil {
-		config = DefaultConfig(domain.AppName)
+		config = DefaultConfig(appName)
 	}
 
 	ui := &UnifiedInterceptor{

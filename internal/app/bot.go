@@ -88,6 +88,7 @@ type Bot struct {
 	sessionManager  *UserSessionManager
 	interceptor     *middleware.UnifiedInterceptor
 	errorHandler    *errors.ErrorHandler
+	appName         string
 }
 
 type WorkerPool struct {
@@ -124,8 +125,8 @@ type Job struct {
 	span    trace.Span
 }
 
-func NewBot(botAPI BotAPI, financeService FinanceService, currencyService CurrencyService) *Bot {
-	interceptor := middleware.NewUnifiedInterceptor(middleware.DefaultConfig(domain.AppName + "-bot"))
+func NewBot(botAPI BotAPI, financeService FinanceService, currencyService CurrencyService, appName string) *Bot {
+	interceptor := middleware.NewUnifiedInterceptor(middleware.DefaultConfig(appName + "-bot"), appName)
 	errorHandler := errors.DefaultErrorHandler()
 
 	return &Bot{
@@ -136,16 +137,17 @@ func NewBot(botAPI BotAPI, financeService FinanceService, currencyService Curren
 		sessionManager:  NewUserSessionManager(),
 		interceptor:     interceptor,
 		errorHandler:    errorHandler,
+		appName:         appName,
 	}
 }
 
-func NewBotFromToken(token string, financeService FinanceService, currencyService CurrencyService) (*Bot, error) {
+func NewBotFromToken(token string, financeService FinanceService, currencyService CurrencyService, appName string) (*Bot, error) {
 	botAPI, err := NewTelegramBotAPI(token)
 	if err != nil {
 		return nil, err
 	}
 
-	bot := NewBot(botAPI, financeService, currencyService)
+	bot := NewBot(botAPI, financeService, currencyService, appName)
 
 	if err := bot.setupBotCommands(); err != nil {
 		log.Printf("Failed to set bot commands: %v", err)
@@ -179,7 +181,7 @@ func (b *Bot) Start(ctx context.Context) error {
 				Text:     update.Message.Text,
 			}
 
-			tracer := otel.Tracer(domain.AppName)
+			tracer := otel.Tracer(b.appName)
 			msgCtx, span := tracer.Start(ctx, "Bot.ProcessTelegramMessage")
 			span.SetAttributes(
 				attribute.Int64("user.id", msg.UserID),
