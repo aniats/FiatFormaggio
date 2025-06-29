@@ -7,9 +7,18 @@ import (
 
 	"github.com/aniats/FiatFormaggio/internal/domain"
 	"github.com/aniats/FiatFormaggio/internal/errors"
+	"github.com/aniats/FiatFormaggio/internal/repository"
 )
 
-func (repo *Repository) UpsertCurrencyRate(ctx context.Context, rate *domain.CurrencyRate) error {
+type CurrencyRepository struct {
+	*Database
+}
+
+func NewCurrencyRepository(db *Database) *CurrencyRepository {
+	return &CurrencyRepository{Database: db}
+}
+
+func (r *CurrencyRepository) UpsertCurrencyRate(ctx context.Context, rate *domain.CurrencyRate) error {
 	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
 		query := `
 			INSERT INTO currency_rates (
@@ -25,7 +34,7 @@ func (repo *Repository) UpsertCurrencyRate(ctx context.Context, rate *domain.Cur
 				source = EXCLUDED.source,
 				updated_at = EXCLUDED.updated_at`
 
-		_, err := repo.db.ExecContext(
+		_, err := r.DB.ExecContext(
 			ctx,
 			query,
 			rate.Currency,
@@ -42,12 +51,11 @@ func (repo *Repository) UpsertCurrencyRate(ctx context.Context, rate *domain.Cur
 		return nil, nil
 	}
 
-	wrappedHandler := repo.interceptor.Chain(handler, "Repository.UpsertCurrencyRate")
-	_, err := wrappedHandler(ctx, rate)
+	_, err := r.ExecuteWithInterceptor(ctx, "Repository.UpsertCurrencyRate", handler)
 	return err
 }
 
-func (repo *Repository) GetCurrencyRates(ctx context.Context) ([]domain.CurrencyRate, error) {
+func (r *CurrencyRepository) GetCurrencyRates(ctx context.Context) ([]domain.CurrencyRate, error) {
 	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
 		query := `
 			SELECT 
@@ -60,7 +68,7 @@ func (repo *Repository) GetCurrencyRates(ctx context.Context) ([]domain.Currency
 			FROM currency_rates 
 			ORDER BY currency`
 
-		rows, err := repo.db.QueryContext(ctx, query)
+		rows, err := r.DB.QueryContext(ctx, query)
 		if err != nil {
 			return nil, errors.WrapRepositoryError(err)
 		}
@@ -92,8 +100,7 @@ func (repo *Repository) GetCurrencyRates(ctx context.Context) ([]domain.Currency
 		return rates, nil
 	}
 
-	wrappedHandler := repo.interceptor.Chain(handler, "Repository.GetCurrencyRates")
-	resultInterface, err := wrappedHandler(ctx, nil)
+	resultInterface, err := r.ExecuteWithInterceptor(ctx, "Repository.GetCurrencyRates", handler)
 	if err != nil {
 		return nil, err
 	}
@@ -104,11 +111,11 @@ func (repo *Repository) GetCurrencyRates(ctx context.Context) ([]domain.Currency
 	return nil, nil
 }
 
-func (repo *Repository) GetLastUpdateTime(ctx context.Context) (*time.Time, error) {
+func (r *CurrencyRepository) GetLastUpdateTime(ctx context.Context) (*time.Time, error) {
 	query := `SELECT MAX(updated_at) FROM currency_rates`
 
 	var lastUpdate sql.NullTime
-	err := repo.db.QueryRowContext(ctx, query).Scan(&lastUpdate)
+	err := r.DB.QueryRowContext(ctx, query).Scan(&lastUpdate)
 	if err != nil {
 		return nil, errors.WrapRepositoryError(err)
 	}
@@ -119,3 +126,5 @@ func (repo *Repository) GetLastUpdateTime(ctx context.Context) (*time.Time, erro
 
 	return &lastUpdate.Time, nil
 }
+
+var _ repository.CurrencyRateRepository = (*CurrencyRepository)(nil)
