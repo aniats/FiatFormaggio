@@ -36,16 +36,16 @@ func ValidateDate(date time.Time) error {
 }
 
 type ExpirationDateHandler struct {
-	DataKey         string
-	NextStep        SessionStep
-	ConfirmationFn  func(*Bot, *UserSession)
-	StoreAsPointer  bool
+	DataKey        string
+	NextStep       SessionStep
+	ConfirmationFn func(*Bot, *UserSession)
+	StoreAsPointer bool
 }
 
 func HandleExpirationDate(bot *Bot, session *UserSession, input string, handler ExpirationDateHandler) error {
 	dateStr := strings.TrimSpace(input)
 
-	if IsSkipResponse(dateStr) || dateStr == "" {
+	if IsSkipResponse(dateStr) {
 		if handler.StoreAsPointer {
 			session.SetData(handler.DataKey, nil)
 		}

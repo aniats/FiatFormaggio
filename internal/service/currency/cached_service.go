@@ -28,7 +28,7 @@ type CachedCurrencyService struct {
 	mu              sync.RWMutex
 	stopChan        chan struct{}
 	updateTicker    *time.Ticker
-	interceptor     *middleware.UnifiedInterceptor
+	interceptor     *middleware.Interceptor
 }
 
 func NewCachedCurrencyService(
@@ -40,7 +40,7 @@ func NewCachedCurrencyService(
 		repo:            repo,
 		externalService: externalService,
 		stopChan:        make(chan struct{}),
-		interceptor:     middleware.NewUnifiedInterceptor(middleware.DefaultConfig("CurrencyService"), appName),
+		interceptor:     middleware.NewInterceptor(middleware.DefaultConfig("CurrencyService"), appName),
 	}
 }
 

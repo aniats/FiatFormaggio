@@ -12,7 +12,7 @@ import (
 
 type Database struct {
 	DB          *middleware.ProfiledDB
-	Interceptor *middleware.UnifiedInterceptor
+	Interceptor *middleware.Interceptor
 }
 
 func NewDatabase(connString string, appName string) (*Database, error) {
@@ -28,7 +28,7 @@ func NewDatabase(connString string, appName string) (*Database, error) {
 		return nil, errors.WrapDatabaseError(err)
 	}
 
-	interceptor := middleware.NewUnifiedInterceptor(middleware.DefaultConfig("Repository"), appName)
+	interceptor := middleware.NewInterceptor(middleware.DefaultConfig("Repository"), appName)
 	profiledDB := middleware.ProfileDatabase(db, appName, true, true, 10*time.Millisecond)
 
 	return &Database{

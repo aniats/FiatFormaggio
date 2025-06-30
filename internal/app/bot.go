@@ -86,7 +86,7 @@ type Bot struct {
 	currencyService CurrencyService
 	workerPool      *WorkerPool
 	sessionManager  *UserSessionManager
-	interceptor     *middleware.UnifiedInterceptor
+	interceptor     *middleware.Interceptor
 	errorHandler    *errors.ErrorHandler
 	appName         string
 }
@@ -126,7 +126,7 @@ type Job struct {
 }
 
 func NewBot(botAPI BotAPI, financeService FinanceService, currencyService CurrencyService, appName string) *Bot {
-	interceptor := middleware.NewUnifiedInterceptor(middleware.DefaultConfig(appName + "-bot"), appName)
+	interceptor := middleware.NewInterceptor(middleware.DefaultConfig(appName + "-bot"), appName)
 	errorHandler := errors.DefaultErrorHandler()
 
 	return &Bot{

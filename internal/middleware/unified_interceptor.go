@@ -13,7 +13,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-type UnifiedInterceptor struct {
+type Interceptor struct {
 	tracer      trace.Tracer
 	middlewares []Middleware
 	config      *InterceptorConfig
@@ -41,12 +41,12 @@ func DefaultConfig(serviceName string) *InterceptorConfig {
 	}
 }
 
-func NewUnifiedInterceptor(config *InterceptorConfig, appName string) *UnifiedInterceptor {
+func NewInterceptor(config *InterceptorConfig, appName string) *Interceptor {
 	if config == nil {
 		config = DefaultConfig(appName)
 	}
 
-	ui := &UnifiedInterceptor{
+	ui := &Interceptor{
 		tracer: otel.Tracer(config.ServiceName),
 		config: config,
 	}
@@ -66,12 +66,12 @@ func NewUnifiedInterceptor(config *InterceptorConfig, appName string) *UnifiedIn
 
 type ServiceWrapper struct {
 	service     interface{}
-	interceptor *UnifiedInterceptor
+	interceptor *Interceptor
 	serviceName string
 	methodCache map[string]reflect.Value
 }
 
-func (ui *UnifiedInterceptor) tracingMiddleware(next Handler) Handler {
+func (ui *Interceptor) tracingMiddleware(next Handler) Handler {
 	return func(ctx context.Context, input interface{}) (interface{}, error) {
 		opName := ui.extractOperationName(ctx)
 
@@ -94,7 +94,7 @@ func (ui *UnifiedInterceptor) tracingMiddleware(next Handler) Handler {
 	}
 }
 
-func (ui *UnifiedInterceptor) metricsMiddleware(next Handler) Handler {
+func (ui *Interceptor) metricsMiddleware(next Handler) Handler {
 	return func(ctx context.Context, input interface{}) (interface{}, error) {
 		start := time.Now()
 
@@ -109,7 +109,7 @@ func (ui *UnifiedInterceptor) metricsMiddleware(next Handler) Handler {
 	}
 }
 
-func (ui *UnifiedInterceptor) profilingMiddleware(next Handler) Handler {
+func (ui *Interceptor) profilingMiddleware(next Handler) Handler {
 	return func(ctx context.Context, input interface{}) (interface{}, error) {
 		if !ui.config.EnableProfiling {
 			return next(ctx, input)
@@ -137,7 +137,7 @@ func (ui *UnifiedInterceptor) profilingMiddleware(next Handler) Handler {
 	}
 }
 
-func (ui *UnifiedInterceptor) Chain(handler Handler, operationName string) Handler {
+func (ui *Interceptor) Chain(handler Handler, operationName string) Handler {
 	finalHandler := func(ctx context.Context, input interface{}) (interface{}, error) {
 		ctx = context.WithValue(ctx, "operation_name", operationName)
 
@@ -153,7 +153,7 @@ func (ui *UnifiedInterceptor) Chain(handler Handler, operationName string) Handl
 	return finalHandler
 }
 
-func (ui *UnifiedInterceptor) extractOperationName(ctx context.Context) string {
+func (ui *Interceptor) extractOperationName(ctx context.Context) string {
 	if opName, ok := ctx.Value("operation_name").(string); ok {
 		if opName != "" {
 			return opName
@@ -166,7 +166,7 @@ func (ui *UnifiedInterceptor) extractOperationName(ctx context.Context) string {
 	return "unknown_operation"
 }
 
-func (ui *UnifiedInterceptor) extractAttributes(input interface{}) []attribute.KeyValue {
+func (ui *Interceptor) extractAttributes(input interface{}) []attribute.KeyValue {
 	var attrs []attribute.KeyValue
 
 	if input == nil {
@@ -199,7 +199,7 @@ func (ui *UnifiedInterceptor) extractAttributes(input interface{}) []attribute.K
 	return attrs
 }
 
-func (ui *UnifiedInterceptor) findField(value reflect.Value, names ...string) reflect.Value {
+func (ui *Interceptor) findField(value reflect.Value, names ...string) reflect.Value {
 	if value.Kind() != reflect.Struct {
 		return reflect.Value{}
 	}

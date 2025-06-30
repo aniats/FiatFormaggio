@@ -6,12 +6,12 @@
 
 ## Основные компоненты
 
-### 1. UnifiedInterceptor
+### 1. Interceptor
 
 Главный оркестратор, который управляет всей функциональностью middleware:
 
 ```go
-type UnifiedInterceptor struct {
+type Interceptor struct {
     tracer      trace.Tracer
     middlewares []Middleware
     config      *InterceptorConfig
@@ -48,7 +48,7 @@ type InterceptorConfig struct {
 Система использует пакет `reflect` Go для динамической обёртки функций:
 
 ```go
-func (ui *UnifiedInterceptor) InterceptFunc(fn interface{}) interface{} {
+func (ui *Interceptor) InterceptFunc(fn interface{}) interface{} {
     fnValue := reflect.ValueOf(fn)
     fnType := reflect.TypeOf(fn)
     
@@ -87,7 +87,7 @@ func (ui *UnifiedInterceptor) InterceptFunc(fn interface{}) interface{} {
 ```go
 type ServiceWrapper struct {
     service     interface{}
-    interceptor *UnifiedInterceptor
+    interceptor *Interceptor
     serviceName string
     methodCache map[string]reflect.Value
 }
@@ -127,7 +127,7 @@ type Handler func(ctx context.Context, input interface{}) (interface{}, error)
 
 **Выполнение цепочки:**
 ```go
-func (ui *UnifiedInterceptor) Chain(handler Handler, operationName string) Handler {
+func (ui *Interceptor) Chain(handler Handler, operationName string) Handler {
     ctx = context.WithValue(ctx, "operation_name", operationName)
     
     currentHandler := handler
@@ -147,7 +147,7 @@ func (ui *UnifiedInterceptor) Chain(handler Handler, operationName string) Handl
 **Реализация**: `/internal/middleware/unified_interceptor.go:245-266`
 
 ```go
-func (ui *UnifiedInterceptor) tracingMiddleware(next Handler) Handler {
+func (ui *Interceptor) tracingMiddleware(next Handler) Handler {
     return func(ctx context.Context, input interface{}) (interface{}, error) {
         opName := ui.extractOperationName(ctx)
         
@@ -182,7 +182,7 @@ func (ui *UnifiedInterceptor) tracingMiddleware(next Handler) Handler {
 **Реализация**: `/internal/middleware/unified_interceptor.go:268-281`
 
 ```go
-func (ui *UnifiedInterceptor) metricsMiddleware(next Handler) Handler {
+func (ui *Interceptor) metricsMiddleware(next Handler) Handler {
     return func(ctx context.Context, input interface{}) (interface{}, error) {
         start := time.Now()
         
@@ -209,7 +209,7 @@ func (ui *UnifiedInterceptor) metricsMiddleware(next Handler) Handler {
 **Реализация**: `/internal/middleware/unified_interceptor.go:283-312`
 
 ```go
-func (ui *UnifiedInterceptor) profilingMiddleware(next Handler) Handler {
+func (ui *Interceptor) profilingMiddleware(next Handler) Handler {
     return func(ctx context.Context, input interface{}) (interface{}, error) {
         opName := ui.extractOperationName(ctx)
         
@@ -295,7 +295,7 @@ wrappedDB := interceptor.InterceptSQL(db)
 ### 1. Автоматическое извлечение атрибутов
 
 ```go
-func (ui *UnifiedInterceptor) extractAttributes(input interface{}) []attribute.KeyValue {
+func (ui *Interceptor) extractAttributes(input interface{}) []attribute.KeyValue {
     // Использует рефлексию для поиска общих полей:
     // - UserID, UserId, ID
     // - ChatID, ChatId
@@ -351,7 +351,7 @@ config := &InterceptorConfig{
 }
 
 // Создание interceptor'а
-interceptor := NewUnifiedInterceptor(config)
+interceptor := NewInterceptor(config)
 ```
 
 ### Пример 2: Обёртка сервиса с кешированием методов
@@ -387,7 +387,7 @@ wrappedService := interceptor.InterceptService(financeService, "FinanceService")
 // ServiceWrapper имеет кеш методов
 type ServiceWrapper struct {
     service     interface{}
-    interceptor *UnifiedInterceptor  
+    interceptor *Interceptor  
     serviceName string
     methodCache map[string]reflect.Value // ВОТ ЗДЕСЬ КЕШИРОВАНИЕ!
 }

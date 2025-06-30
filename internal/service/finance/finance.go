@@ -14,11 +14,11 @@ type CurrencyService interface {
 type FinanceService struct {
 	repo            repository.Repository
 	currencyService CurrencyService
-	interceptor     *middleware.UnifiedInterceptor
+	interceptor     *middleware.Interceptor
 }
 
 func NewFinanceService(repo repository.Repository, currencyService CurrencyService, appName string) *FinanceService {
-	interceptor := middleware.NewUnifiedInterceptor(middleware.DefaultConfig("FinanceService"), appName)
+	interceptor := middleware.NewInterceptor(middleware.DefaultConfig("FinanceService"), appName)
 	
 	return &FinanceService{
 		repo:            repo,
