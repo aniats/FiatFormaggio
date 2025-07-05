@@ -1,0 +1,8 @@
+# cloud-config
+users:
+  - name: annatselikova
+    groups: sudo
+    shell: /bin/bash
+    sudo: 'ALL=(ALL) NOPASSWD:ALL'
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJZ6jDGIRZDkZ/LzjbwpgFdprV/+tj0eT8d8tk/7Jj0p annatselikova@Annas-MacBook-Air.local
