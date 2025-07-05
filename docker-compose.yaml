@@ -27,13 +27,83 @@ services:
       dockerfile: Dockerfile.migrate
     container_name: fiat_formaggio_migrate
     environment:
-      DATABASE_URL: ${DATABASE_URL}
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
     depends_on:
       postgres:
         condition: service_healthy
     networks:
       - fiat_network
     restart: "no"  # Run once and exit
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: fiat_formaggio_jaeger
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "14268:14268"  # Jaeger collector HTTP
+      - "14250:14250"  # Jaeger collector gRPC
+      - "4318:4318"    # OTLP HTTP receiver
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    networks:
+      - fiat_network
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: fiat_formaggio_prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    configs:
+      - source: prometheus_config
+        target: /etc/prometheus/prometheus.yml
+    networks:
+      - fiat_network
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: fiat_formaggio_grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - fiat_network
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+
+  pprof-web:
+    image: golang:1.24-alpine
+    container_name: fiat_formaggio_pprof_web
+    ports:
+      - "8081:8081"
+    command: >
+      sh -c "
+        apk add --no-cache graphviz curl &&
+        go install github.com/google/pprof@latest &&
+        echo 'Starting pprof web interface...' &&
+        while true; do
+          echo 'Capturing 30s CPU profile...' &&
+          timeout 35 /go/bin/pprof -http=0.0.0.0:8081 -seconds=30 http://host.docker.internal:8080/debug/pprof/profile &&
+          sleep 10
+        done
+      "
+    networks:
+      - fiat_network
+    restart: unless-stopped
 
   app:
     build:
@@ -43,18 +113,37 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      JAEGER_ENDPOINT: ${JAEGER_ENDPOINT}
     depends_on:
       postgres:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+      jaeger:
+        condition: service_started
     networks:
       - fiat_network
     restart: unless-stopped
 
 volumes:
   postgres_data:
+  prometheus_data:
+  grafana_data:
 
 networks:
   fiat_network:
     driver: bridge
+
+configs:
+  prometheus_config:
+    content: |
+      global:
+        scrape_interval: 15s
+        evaluation_interval: 15s
+
+      scrape_configs:
+        - job_name: 'fiat-formaggio-app'
+          static_configs:
+            - targets: ['host.docker.internal:8080'] # targets: ['app:8080']
+          metrics_path: '/metrics'
+          scrape_interval: 5s

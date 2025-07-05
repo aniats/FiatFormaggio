@@ -2,8 +2,9 @@ package postgres
 
 import (
 	"context"
-	"fmt"
+
 	"github.com/aniats/FiatFormaggio/internal/domain"
+	"github.com/aniats/FiatFormaggio/internal/errors"
 )
 
 func (repo *Repository) EnsureUserExists(ctx context.Context, userID domain.UserId, username string) (bool, error) {
@@ -11,7 +12,7 @@ func (repo *Repository) EnsureUserExists(ctx context.Context, userID domain.User
 	checkQuery := `SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)`
 	err := repo.db.QueryRowContext(ctx, checkQuery, userID).Scan(&exists)
 	if err != nil {
-		return false, fmt.Errorf("failed to check user existence: %w", err)
+		return false, errors.WrapRepositoryError(err)
 	}
 
 	if exists {
@@ -30,7 +31,7 @@ func (repo *Repository) EnsureUserExists(ctx context.Context, userID domain.User
     `
 	_, err = repo.db.ExecContext(ctx, insertQuery, userID, username)
 	if err != nil {
-		return false, fmt.Errorf("failed to create user: %w", err)
+		return false, errors.WrapRepositoryError(err)
 	}
 
 	return true, nil

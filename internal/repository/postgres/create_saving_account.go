@@ -2,8 +2,10 @@ package postgres
 
 import (
 	"context"
-	"fmt"
+	"time"
+
 	"github.com/aniats/FiatFormaggio/internal/domain"
+	"github.com/aniats/FiatFormaggio/internal/errors"
 )
 
 func (repo *Repository) CreateSavingAccount(ctx context.Context, account *domain.SavingAccount) error {
@@ -16,9 +18,13 @@ func (repo *Repository) CreateSavingAccount(ctx context.Context, account *domain
             expiration_date, 
             currency
         ) VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING id, expiration_date
 	`
 
-	_, err := repo.db.ExecContext(
+	var id int64
+	var expirationDate *time.Time
+
+	err := repo.db.QueryRowContext(
 		ctx,
 		query,
 		account.UserId,
@@ -27,11 +33,15 @@ func (repo *Repository) CreateSavingAccount(ctx context.Context, account *domain
 		account.InterestRateBasisPoints,
 		account.ExpirationDate,
 		account.Currency,
-	)
+	).Scan(&id, &expirationDate)
 
 	if err != nil {
-		return fmt.Errorf("failed to create saving account: %w", err)
+		return errors.WrapRepositoryError(err)
 	}
+
+	// Update the account object with the returned values
+	account.Id = id
+	account.ExpirationDate = expirationDate
 
 	return nil
 }

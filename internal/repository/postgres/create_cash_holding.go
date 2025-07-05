@@ -2,31 +2,44 @@ package postgres
 
 import (
 	"context"
-	"fmt"
+
 	"github.com/aniats/FiatFormaggio/internal/domain"
+	"github.com/aniats/FiatFormaggio/internal/errors"
 )
 
 func (repo *Repository) CreateCashHolding(ctx context.Context, cash *domain.CashHolding) error {
-	query := `
-        INSERT INTO cash_holdings (
-            user_id, 
-            name, 
-            amount_minor_units, 
-            currency
-        ) VALUES ($1, $2, $3, $4)`
+	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
+		query := `
+			INSERT INTO cash_holdings (
+				user_id, 
+				name, 
+				amount_minor_units, 
+				currency
+			) VALUES ($1, $2, $3, $4)
+			RETURNING id`
 
-	_, err := repo.db.ExecContext(
-		ctx,
-		query,
-		cash.UserId,
-		cash.Name,
-		cash.AmountMinorUnits,
-		cash.Currency,
-	)
+		var id int64
 
-	if err != nil {
-		return fmt.Errorf("failed to create cash holding: %w", err)
+		err := repo.db.QueryRowContext(
+			ctx,
+			query,
+			cash.UserId,
+			cash.Name,
+			cash.AmountMinorUnits,
+			cash.Currency,
+		).Scan(&id)
+
+		if err != nil {
+			return nil, errors.WrapRepositoryError(err)
+		}
+
+		// Update the cash holding object with the returned ID
+		cash.Id = id
+
+		return nil, nil
 	}
 
-	return nil
+	wrappedHandler := repo.interceptor.Chain(handler, "Repository.CreateCashHolding")
+	_, err := wrappedHandler(ctx, cash)
+	return err
 }

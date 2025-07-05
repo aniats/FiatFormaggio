@@ -2,9 +2,11 @@ package app
 
 import (
 	"context"
-	"fmt"
-	"github.com/aniats/FiatFormaggio/internal/domain"
 	"time"
+
+	"github.com/aniats/FiatFormaggio/internal/domain"
+	"github.com/aniats/FiatFormaggio/internal/errors"
+	"github.com/aniats/FiatFormaggio/internal/metrics"
 )
 
 type SessionType string
@@ -77,7 +79,7 @@ func (usm *UserSessionManager) RegisterHandler(handler SessionHandler) {
 func (usm *UserSessionManager) StartSession(userID domain.UserId, chatID int64, sessionType SessionType) (*UserSession, error) {
 	handler, exists := usm.handlers[sessionType]
 	if !exists {
-		return nil, fmt.Errorf("нет зарегистрированного обработчика для типа сессии: %s", sessionType)
+		return nil, errors.NewUnknownSessionHandlerError(string(sessionType))
 	}
 
 	session := &UserSession{
@@ -101,6 +103,7 @@ func (usm *UserSessionManager) GetSession(userID domain.UserId) *UserSession {
 
 func (usm *UserSessionManager) ClearSession(userID domain.UserId) {
 	delete(usm.sessions, userID)
+	metrics.DecrementActiveSessions()
 }
 
 func (usm *UserSessionManager) UpdateLastActivity(userID domain.UserId) {
@@ -109,15 +112,6 @@ func (usm *UserSessionManager) UpdateLastActivity(userID domain.UserId) {
 	}
 }
 
-func (usm *UserSessionManager) CleanupExpiredSessions(maxInactivity time.Duration) {
-	cutoff := time.Now().Add(-maxInactivity)
-
-	for userID, session := range usm.sessions {
-		if session.LastActivity.Before(cutoff) {
-			delete(usm.sessions, userID)
-		}
-	}
-}
 
 func (s *UserSession) GetData(key string) interface{} {
 	return s.Data[key]

@@ -2,13 +2,13 @@
 
 # Database commands
 db-start:
-	docker-compose up -d postgres
+	docker compose up -d postgres
 
 db-stop:
-	docker-compose down
+	docker compose down
 
 db-logs:
-	docker-compose logs -f postgres
+	docker compose logs -f postgres
 
 # Migration commands
 migrate-up:
@@ -30,7 +30,7 @@ migrate-create:
 # Development
 dev-setup: db-start
 	@echo "Waiting for database to be ready..."
-	@until docker-compose exec postgres pg_isready -U $(POSTGRES_USER) -d $(POSTGRES_DB); do sleep 1; done
+	@until docker compose exec postgres pg_isready -U $(POSTGRES_USER) -d $(POSTGRES_DB); do sleep 1; done
 	$(MAKE) migrate-up
 
 dev-reset: migrate-reset migrate-up

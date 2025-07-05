@@ -3,24 +3,25 @@ package app
 import (
 	"context"
 	"fmt"
-	"github.com/aniats/FiatFormaggio/internal/service/finance/models"
-
 	"log"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/aniats/FiatFormaggio/internal/domain"
-
+	"github.com/aniats/FiatFormaggio/internal/errors"
+	"github.com/aniats/FiatFormaggio/internal/metrics"
+	"github.com/aniats/FiatFormaggio/internal/middleware"
+	"github.com/aniats/FiatFormaggio/internal/service/finance/models"
 	tgBotAPI "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
-	// UpdateTimeoutSeconds defines timeout for getting updates from Telegram API
-	UpdateTimeoutSeconds = 60
-	// DefaultWorkerPoolSize defines the number of worker goroutines for message processing
-	DefaultWorkerPoolSize = 10
-	// WorkerChannelBufferSize defines the buffer size for the worker channel
+	UpdateTimeoutSeconds    = 60
+	DefaultWorkerPoolSize   = 10
 	WorkerChannelBufferSize = 100
 )
 
@@ -59,6 +60,7 @@ const (
 type BotAPI interface {
 	GetLastEvents() <-chan tgBotAPI.Update
 	SendMessage(chatID int64, text string) error
+	SetMyCommands(commands []tgBotAPI.BotCommand) error
 	Close()
 }
 
@@ -84,6 +86,8 @@ type Bot struct {
 	currencyService CurrencyService
 	workerPool      *WorkerPool
 	sessionManager  *UserSessionManager
+	interceptor     *middleware.UnifiedInterceptor
+	errorHandler    *errors.ErrorHandler
 }
 
 type WorkerPool struct {
@@ -109,7 +113,7 @@ func (m *Message) Command() string {
 		return ""
 	}
 
-	command := parts[0][1:] // Remove the '/' prefix
+	command := parts[0][1:]
 	return command
 }
 
@@ -117,15 +121,21 @@ type Job struct {
 	ctx     context.Context
 	message *Message
 	bot     *Bot
+	span    trace.Span
 }
 
 func NewBot(botAPI BotAPI, financeService FinanceService, currencyService CurrencyService) *Bot {
+	interceptor := middleware.NewUnifiedInterceptor(middleware.DefaultConfig(domain.AppName + "-bot"))
+	errorHandler := errors.DefaultErrorHandler()
+
 	return &Bot{
 		botAPI:          botAPI,
 		financeService:  financeService,
 		currencyService: currencyService,
 		workerPool:      NewWorkerPool(DefaultWorkerPoolSize),
 		sessionManager:  NewUserSessionManager(),
+		interceptor:     interceptor,
+		errorHandler:    errorHandler,
 	}
 }
 
@@ -135,7 +145,13 @@ func NewBotFromToken(token string, financeService FinanceService, currencyServic
 		return nil, err
 	}
 
-	return NewBot(botAPI, financeService, currencyService), nil
+	bot := NewBot(botAPI, financeService, currencyService)
+
+	if err := bot.setupBotCommands(); err != nil {
+		log.Printf("Failed to set bot commands: %v", err)
+	}
+
+	return bot, nil
 }
 
 func (b *Bot) Start(ctx context.Context) error {
@@ -144,7 +160,7 @@ func (b *Bot) Start(ctx context.Context) error {
 
 	updates := b.botAPI.GetLastEvents()
 
-	log.Printf("Bot started with %d workers", b.workerPool.workers)
+	log.Printf("Bot started with %s workers", FormatInteger(int64(b.workerPool.workers)))
 
 	for {
 		select {
@@ -163,10 +179,19 @@ func (b *Bot) Start(ctx context.Context) error {
 				Text:     update.Message.Text,
 			}
 
+			tracer := otel.Tracer(domain.AppName)
+			msgCtx, span := tracer.Start(ctx, "Bot.ProcessTelegramMessage")
+			span.SetAttributes(
+				attribute.Int64("user.id", msg.UserID),
+				attribute.Int64("chat.id", msg.ChatID),
+				attribute.String("message.text", msg.Text),
+			)
+
 			job := Job{
-				ctx:     ctx,
+				ctx:     msgCtx,
 				message: msg,
 				bot:     b,
+				span:    span,
 			}
 
 			select {
@@ -174,7 +199,7 @@ func (b *Bot) Start(ctx context.Context) error {
 			case <-ctx.Done():
 				return ctx.Err()
 			default:
-				log.Printf("Worker pool is full, dropping message from chat %d", update.Message.Chat.ID)
+				log.Printf("Worker pool is full, dropping message from chat %s", FormatInteger(update.Message.Chat.ID))
 			}
 		}
 	}
@@ -187,11 +212,37 @@ func (b *Bot) Stop() {
 
 func (b *Bot) sendMessage(chatID int64, text string) {
 	if err := b.botAPI.SendMessage(chatID, text); err != nil {
-		log.Printf("Error sending message to chat %d: %v", chatID, err)
+		log.Printf("Error sending message to chat %s: %v", FormatInteger(chatID), err)
+	}
+}
+
+func (b *Bot) sendErrorMessage(ctx context.Context, chatID int64, err error, operation string) {
+	userMsg := b.errorHandler.Handle(ctx, err, operation)
+	if userMsg != "" {
+		b.sendMessage(chatID, userMsg)
 	}
 }
 
 func (b *Bot) handleMessage(ctx context.Context, message *Message) {
+	handler := func(ctx context.Context, msg interface{}) error {
+		if message, ok := msg.(*Message); ok {
+			b.processMessage(ctx, message)
+		}
+		return nil
+	}
+
+	middlewareHandler := func(ctx context.Context, input interface{}) (interface{}, error) {
+		return nil, handler(ctx, input)
+	}
+	wrappedHandler := b.interceptor.Chain(middlewareHandler, "Bot.handleMessage")
+	_, err := wrappedHandler(ctx, message)
+	if err != nil {
+		log.Printf("Error processing message: %v", err)
+	}
+}
+
+func (b *Bot) processMessage(ctx context.Context, message *Message) {
+
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
@@ -203,7 +254,7 @@ func (b *Bot) handleMessage(ctx context.Context, message *Message) {
 
 	isNewUser, err := b.financeService.EnsureUserExists(ctx, userID, telegramUsername)
 	if err != nil {
-		log.Printf("Failed to ensure user exists for userID %d: %v", userID, err)
+		log.Printf("Failed to ensure user exists for userID %s: %v", FormatInteger(int64(userID)), err)
 		b.sendMessage(chatID, "❌ Ошибка инициализации пользователя. Попробуйте позже.")
 		return
 	}
@@ -249,20 +300,51 @@ func (b *Bot) startSession(ctx context.Context, msg *Message, sessionType Sessio
 	userID := domain.UserId(msg.UserID)
 	chatID := msg.ChatID
 
+	sessionHandler := func(ctx context.Context, input interface{}) (interface{}, error) {
+		b.createAndStartSession(ctx, userID, chatID, msg, sessionType)
+		return nil, nil
+	}
+	wrappedHandler := b.interceptor.Chain(sessionHandler, "Bot.startSession")
+	_, err := wrappedHandler(ctx, msg)
+
+	if err != nil {
+		log.Printf("Error starting session: %v", err)
+	}
+}
+
+func (b *Bot) createAndStartSession(ctx context.Context, userID domain.UserId, chatID int64, msg *Message, sessionType SessionType) {
 	session, err := b.sessionManager.StartSession(userID, chatID, sessionType)
 	if err != nil {
-		b.sendMessage(chatID, fmt.Sprintf("❌ Не удалось начать сессию: %s", err.Error()))
+		b.sendErrorMessage(ctx, chatID, err, "start_session")
 		return
 	}
 
+	metrics.IncrementActiveSessions()
+
 	if err := session.Handler.HandleStep(ctx, b, session, msg); err != nil {
-		b.sendMessage(chatID, fmt.Sprintf("❌ Ошибка: %s", err.Error()))
+		b.sendErrorMessage(ctx, chatID, err, "session_step")
 		b.sessionManager.ClearSession(userID)
 	}
 }
 
 func (b *Bot) handleSessionMessage(ctx context.Context, msg *Message, session *UserSession) {
-	b.sessionManager.UpdateLastActivity(session.UserID)
+	handler := func(ctx context.Context, message interface{}) error {
+		b.sessionManager.UpdateLastActivity(session.UserID)
+		b.processSessionMessage(ctx, msg, session)
+		return nil
+	}
+
+	middlewareHandler := func(ctx context.Context, input interface{}) (interface{}, error) {
+		return nil, handler(ctx, input)
+	}
+	wrappedHandler := b.interceptor.Chain(middlewareHandler, "Bot.handleSessionMessage")
+	_, err := wrappedHandler(ctx, msg)
+	if err != nil {
+		log.Printf("Error in session message: %v", err)
+	}
+}
+
+func (b *Bot) processSessionMessage(ctx context.Context, msg *Message, session *UserSession) {
 
 	if strings.ToLower(msg.Text) == "/cancel" || strings.ToLower(msg.Text) == "отмена" {
 		b.cancelSession(session.UserID, session.ChatID)
@@ -291,7 +373,7 @@ func (wp *WorkerPool) Start(ctx context.Context) {
 		wp.wg.Add(1)
 		go wp.worker(ctx, i+1)
 	}
-	log.Printf("Started %d workers", wp.workers)
+	log.Printf("Started %s workers", FormatInteger(int64(wp.workers)))
 }
 
 func (wp *WorkerPool) Stop() {
@@ -303,20 +385,76 @@ func (wp *WorkerPool) Stop() {
 func (wp *WorkerPool) worker(ctx context.Context, workerID int64) {
 	defer wp.wg.Done()
 
-	log.Printf("Worker %d started", workerID)
+	log.Printf("Worker %s started", FormatInteger(workerID))
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Printf("Worker %d stopping due to context cancellation", workerID)
+			log.Printf("Worker %s stopping due to context cancellation", FormatInteger(workerID))
 			return
 		case job, ok := <-wp.jobChannel:
 			if !ok {
-				log.Printf("Worker %d stopping due to closed channel", workerID)
+				log.Printf("Worker %s stopping due to closed channel", FormatInteger(workerID))
 				return
 			}
 
 			job.bot.handleMessage(job.ctx, job.message)
+			job.span.End()
 		}
 	}
+}
+
+func (b *Bot) setupBotCommands() error {
+	commands := []tgBotAPI.BotCommand{
+		{
+			Command:     "start",
+			Description: "🏠 Начать работу с ботом",
+		},
+		{
+			Command:     "help",
+			Description: "❓ Показать справку по командам",
+		},
+		{
+			Command:     "total",
+			Description: "💰 Показать общий баланс",
+		},
+		{
+			Command:     "deposits",
+			Description: "💳 Показать депозиты",
+		},
+		{
+			Command:     "create_deposit",
+			Description: "➕ Добавить депозит",
+		},
+		{
+			Command:     "brokerage_accounts",
+			Description: "📈 Показать брокерские счета",
+		},
+		{
+			Command:     "create_brokerage_account",
+			Description: "➕ Добавить брокерский счет",
+		},
+		{
+			Command:     "saving_accounts",
+			Description: "🏦 Показать накопительные счета",
+		},
+		{
+			Command:     "create_saving_account",
+			Description: "➕ Добавить накопительный счет",
+		},
+		{
+			Command:     "cash_holdings",
+			Description: "💵 Показать наличные",
+		},
+		{
+			Command:     "create_cash_holding",
+			Description: "➕ Добавить наличные",
+		},
+		{
+			Command:     "rates",
+			Description: "💱 Курсы валют",
+		},
+	}
+
+	return b.botAPI.SetMyCommands(commands)
 }

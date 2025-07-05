@@ -7,53 +7,50 @@ import (
 	"log"
 )
 
-
 func (b *Bot) sendBrokerageAccountsCommand(ctx context.Context, chatID int64, userID domain.UserId) {
+	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
+		return b.processBrokerageAccountsCommand(ctx, chatID, userID)
+	}
+
+	params := map[string]interface{}{
+		"user_id": int64(userID),
+		"chat_id": chatID,
+	}
+
+	wrappedHandler := b.interceptor.Chain(handler, "Bot.sendBrokerageAccountsCommand")
+	_, _ = wrappedHandler(ctx, params)
+}
+
+func (b *Bot) processBrokerageAccountsCommand(ctx context.Context, chatID int64, userID domain.UserId) (interface{}, error) {
 	accounts, err := b.financeService.GetBrokerageAccountsByUserID(ctx, userID)
 	if err != nil {
-		log.Printf("Ошибка при получении брокерских счетов для пользователя %d: %v", userID, err)
+		log.Printf("Ошибка при получении брокерских счетов для пользователя %s: %v", FormatInteger(int64(userID)), err)
 		b.sendMessage(chatID, "❌ Ошибка при получении брокерских счетов. Попробуйте позже.")
-		return
+		return nil, err
 	}
 
 	if len(accounts) == 0 {
 		b.sendMessage(chatID, "📭 У вас пока нет сохраненных брокерских счетов.\n\nСоздайте первый счет: /create_brokerage_account")
-		return
+		return nil, nil
 	}
 
 	text := "📈 Ваши брокерские счета:\n\n"
 	for i, account := range accounts {
-		amount := float64(account.AmountMinorUnits) / defaultMinorUnits
+		amount := float64(account.AmountMinorUnits) / DefaultMinorUnits
 
 		text += fmt.Sprintf("%d. %s\n", i+1, account.Name)
-		text += fmt.Sprintf("   💰 %s\n", formatAmount(amount, account.Currency.String()))
-		
+		text += fmt.Sprintf("   💰 %s\n", FormatAmount(amount, account.Currency.String()))
+
 		if account.Broker != nil {
 			text += fmt.Sprintf("   🏦 %s\n", *account.Broker)
 		}
-		
-		text += fmt.Sprintf("   📊 %s\n", formatAccountType(account.AccountType))
+
+		text += fmt.Sprintf("   📊 %s\n", FormatAccountType(account.AccountType))
 		text += "\n"
 	}
 
-	text += fmt.Sprintf("📊 Всего счетов: %d", len(accounts))
+	text += fmt.Sprintf("📊 Всего счетов: %s", FormatInteger(int64(len(accounts))))
 
 	b.sendMessage(chatID, text)
-}
-
-func formatAccountType(accountType domain.BrokerageType) string {
-	switch accountType {
-	case domain.Regular:
-		return "Обычный"
-	case domain.IIS:
-		return "ИИС"
-	case domain.IIS3:
-		return "ИИС-3"
-	case domain.IRA:
-		return "ИРА"
-	case domain.Margin:
-		return "Маржинальный"
-	default:
-		return string(accountType)
-	}
+	return nil, nil
 }

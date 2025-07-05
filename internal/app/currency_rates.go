@@ -5,18 +5,36 @@ import (
 	"fmt"
 
 	"github.com/aniats/FiatFormaggio/internal/domain"
+	"github.com/aniats/FiatFormaggio/internal/errors"
 )
 
 func (b *Bot) sendCurrencyRatesCommand(ctx context.Context, chatID int64) {
+	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
+		return nil, b.processCurrencyRatesCommand(ctx, chatID)
+	}
+
+	params := map[string]interface{}{
+		"chat_id": chatID,
+	}
+
+	wrappedHandler := b.interceptor.Chain(handler, "Bot.sendCurrencyRatesCommand")
+	_, _ = wrappedHandler(ctx, params)
+}
+
+func (b *Bot) processCurrencyRatesCommand(ctx context.Context, chatID int64) error {
 	rates, err := b.currencyService.GetCurrencyRates(ctx)
 	if err != nil {
-		b.sendMessage(chatID, "❌ Ошибка получения курсов валют. Попробуйте позже.")
-		return
+		apiErr := errors.WrapError(err, errors.CodeExternalAPIError,
+			"Failed to fetch currency rates from external service",
+			"❌ Ошибка получения курсов валют. Попробуйте позже.")
+		b.sendErrorMessage(ctx, chatID, apiErr, "get_currency_rates")
+		return apiErr
 	}
 
 	if len(rates) == 0 {
-		b.sendMessage(chatID, "📭 Курсы валют временно недоступны.")
-		return
+		noRatesErr := errors.ErrCurrencyRatesUnavailable
+		b.sendMessage(chatID, errors.GetUserMessage(noRatesErr))
+		return noRatesErr
 	}
 
 	lastUpdateText := "сегодня"
@@ -33,7 +51,7 @@ func (b *Bot) sendCurrencyRatesCommand(ctx context.Context, chatID int64) {
 		for _, rate := range rates {
 			if rate.Currency == currencyCode {
 				unitRate := float64(rate.RateMinorUnits) / 100.0
-				text += fmt.Sprintf("%s: %.4f ₽\n", rate.Currency, unitRate)
+				text += fmt.Sprintf("%s: %s ₽\n", rate.Currency, FormatRate(unitRate))
 				majorRatesShown[currencyCode] = true
 				break
 			}
@@ -45,11 +63,12 @@ func (b *Bot) sendCurrencyRatesCommand(ctx context.Context, chatID int64) {
 	for _, rate := range rates {
 		if !majorRatesShown[rate.Currency] {
 			unitRate := float64(rate.RateMinorUnits) / 100.0
-			text += fmt.Sprintf("%s: %.4f ₽\n", rate.Currency, unitRate)
+			text += fmt.Sprintf("%s: %s ₽\n", rate.Currency, FormatRate(unitRate))
 		}
 	}
 
-	text += fmt.Sprintf("\n📊 Всего валют: %d", len(rates))
+	text += fmt.Sprintf("\n📊 Всего валют: %s", FormatInteger(int64(len(rates))))
 
 	b.sendMessage(chatID, text)
+	return nil
 }

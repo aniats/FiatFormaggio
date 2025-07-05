@@ -3,7 +3,6 @@ package cbr
 import (
 	"context"
 	"encoding/xml"
-
 	"fmt"
 	"net/http"
 	"strconv"
@@ -11,15 +10,22 @@ import (
 	"time"
 
 	"github.com/aniats/FiatFormaggio/internal/domain"
+	"github.com/aniats/FiatFormaggio/internal/errors"
+	"github.com/aniats/FiatFormaggio/internal/middleware"
 	"golang.org/x/net/html/charset"
 )
 
 type CBRService struct {
-	client *http.Client
+	client      *http.Client
+	interceptor *middleware.UnifiedInterceptor
 }
 
 func NewCBRService(client *http.Client) *CBRService {
-	return &CBRService{client: client}
+	interceptor := middleware.NewUnifiedInterceptor(middleware.DefaultConfig("CBRService"))
+	return &CBRService{
+		client:      client,
+		interceptor: interceptor,
+	}
 }
 
 type ValCurs struct {
@@ -40,65 +46,91 @@ type Valute struct {
 }
 
 func (s *CBRService) GetCurrencyRates(ctx context.Context, date time.Time) ([]*domain.CurrencyRateCBR, error) {
-	resp, err := s.fetchCBRData(ctx, date)
+	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
+		resp, err := s.fetchCBRData(ctx, date)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+
+		decoder := xml.NewDecoder(resp.Body)
+		decoder.CharsetReader = charset.NewReaderLabel
+
+		var valCurs ValCurs
+		if err := decoder.Decode(&valCurs); err != nil {
+			return nil, errors.WrapExternalAPIError(err)
+		}
+
+		rates := make([]*domain.CurrencyRateCBR, 0, len(valCurs.Valutes))
+		for _, valute := range valCurs.Valutes {
+			rate, err := s.parseValuteToRate(valute)
+			if err != nil {
+				continue
+			}
+			rates = append(rates, rate)
+		}
+
+		return rates, nil
+	}
+
+	wrappedHandler := s.interceptor.Chain(handler, "CBRService.GetCurrencyRates")
+	resultInterface, err := wrappedHandler(ctx, date)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
 
-	decoder := xml.NewDecoder(resp.Body)
-	decoder.CharsetReader = charset.NewReaderLabel
-
-	var valCurs ValCurs
-	if err := decoder.Decode(&valCurs); err != nil {
-		return nil, fmt.Errorf("failed to decode XML: %w", err)
+	if resultInterface != nil {
+		return resultInterface.([]*domain.CurrencyRateCBR), nil
 	}
-
-	rates := make([]*domain.CurrencyRateCBR, 0, len(valCurs.Valutes))
-	for _, valute := range valCurs.Valutes {
-		rate, err := s.parseValuteToRate(valute)
-		if err != nil {
-			continue
-		}
-		rates = append(rates, rate)
-	}
-
-	return rates, nil
+	return nil, nil
 }
 
 func (s *CBRService) fetchCBRData(ctx context.Context, date time.Time) (*http.Response, error) {
-	url := fmt.Sprintf("https://www.cbr.ru/scripts/XML_daily.asp?date_req=%s", date.Format("02/01/2006"))
+	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
+		url := fmt.Sprintf("https://www.cbr.ru/scripts/XML_daily.asp?date_req=%s", date.Format("02/01/2006"))
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+		if err != nil {
+			return nil, errors.WrapExternalAPIError(err)
+		}
+
+		req.Header.Set("User-Agent", "Mozilla/5.0")
+
+		resp, err := s.client.Do(req)
+		if err != nil {
+			return nil, errors.WrapExternalAPIError(err)
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			return nil, errors.NewTechnicalError(errors.CodeExternalAPIError, fmt.Sprintf("unexpected status code: %d", resp.StatusCode))
+		}
+
+		return resp, nil
+	}
+
+	wrappedHandler := s.interceptor.Chain(handler, "CBRService.fetchCBRData")
+	resultInterface, err := wrappedHandler(ctx, date)
 	if err != nil {
-		return nil, fmt.Errorf("error creating request: %w", err)
+		return nil, err
 	}
 
-	req.Header.Set("User-Agent", "Mozilla/5.0")
-
-	resp, err := s.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
+	if resultInterface != nil {
+		return resultInterface.(*http.Response), nil
 	}
-
-	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
-
-	return resp, nil
+	return nil, nil
 }
 
 func (s *CBRService) parseValuteToRate(valute Valute) (*domain.CurrencyRateCBR, error) {
 	valueStr := strings.Replace(valute.Value, ",", ".", -1)
 	value, err := strconv.ParseFloat(valueStr, 64)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse value %s: %w", valute.Value, err)
+		return nil, errors.WrapParseError(err).WithContext("value", valute.Value)
 	}
 
 	nominal, err := strconv.Atoi(valute.Nominal)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse nominal %s: %w", valute.Nominal, err)
+		return nil, errors.WrapParseError(err).WithContext("nominal", valute.Nominal)
 	}
 
 	return &domain.CurrencyRateCBR{

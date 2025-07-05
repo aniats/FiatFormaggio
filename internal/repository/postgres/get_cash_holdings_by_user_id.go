@@ -2,8 +2,9 @@ package postgres
 
 import (
 	"context"
-	"fmt"
+
 	"github.com/aniats/FiatFormaggio/internal/domain"
+	"github.com/aniats/FiatFormaggio/internal/errors"
 )
 
 func (repo *Repository) GetCashHoldingsByUserID(ctx context.Context, userId domain.UserId) ([]domain.CashHolding, error) {
@@ -21,7 +22,7 @@ func (repo *Repository) GetCashHoldingsByUserID(ctx context.Context, userId doma
 
 	rows, err := repo.db.QueryContext(ctx, query, userId)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query cash holdings for user %d: %w", userId, err)
+		return nil, errors.WrapRepositoryError(err)
 	}
 	defer rows.Close()
 
@@ -37,14 +38,14 @@ func (repo *Repository) GetCashHoldingsByUserID(ctx context.Context, userId doma
 			&cash.Currency,
 		)
 		if err != nil {
-			return nil, fmt.Errorf("failed to scan cash holding row: %w", err)
+			return nil, errors.WrapRepositoryError(err)
 		}
 
 		cashHoldings = append(cashHoldings, cash)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating over cash holding rows: %w", err)
+		return nil, errors.WrapRepositoryError(err)
 	}
 
 	return cashHoldings, nil

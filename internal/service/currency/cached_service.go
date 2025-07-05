@@ -2,19 +2,19 @@ package currency
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"sync"
 	"time"
 
+	"github.com/aniats/FiatFormaggio/internal/app"
 	"github.com/aniats/FiatFormaggio/internal/domain"
+	"github.com/aniats/FiatFormaggio/internal/errors"
+	"github.com/aniats/FiatFormaggio/internal/middleware"
 	"github.com/aniats/FiatFormaggio/internal/repository"
 )
 
 const (
-	// CacheUpdateInterval - how often to update currency rates
 	CacheUpdateInterval = 24 * time.Hour
-	// MinorUnitsMultiplier - conversion factor for minor units (kopecks to rubles)
 	MinorUnitsMultiplier = 100
 )
 
@@ -28,6 +28,7 @@ type CachedCurrencyService struct {
 	mu              sync.RWMutex
 	stopChan        chan struct{}
 	updateTicker    *time.Ticker
+	interceptor     *middleware.UnifiedInterceptor
 }
 
 func NewCachedCurrencyService(
@@ -38,6 +39,7 @@ func NewCachedCurrencyService(
 		repo:            repo,
 		externalService: externalService,
 		stopChan:        make(chan struct{}),
+		interceptor:     middleware.NewUnifiedInterceptor(middleware.DefaultConfig("CurrencyService")),
 	}
 }
 
@@ -62,29 +64,46 @@ func (s *CachedCurrencyService) Stop() {
 }
 
 func (s *CachedCurrencyService) GetCurrencyRates(ctx context.Context) ([]domain.CurrencyRate, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	rates, err := s.repo.GetCurrencyRates(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get cached currency rates: %w", err)
-	}
-
-	if len(rates) == 0 {
-		s.mu.RUnlock()
-		if err := s.updateCurrencyRates(ctx); err != nil {
-			s.mu.RLock()
-			return nil, fmt.Errorf("no cached rates and update failed: %w", err)
-		}
+	var result []domain.CurrencyRate
+	var err error
+	
+	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
 		s.mu.RLock()
+		defer s.mu.RUnlock()
 
-		rates, err = s.repo.GetCurrencyRates(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get currency rates after update: %w", err)
+		rates, repoErr := s.repo.GetCurrencyRates(ctx)
+		if repoErr != nil {
+			return nil, errors.WrapRepositoryError(repoErr)
 		}
-	}
 
-	return rates, nil
+		if len(rates) == 0 {
+			s.mu.RUnlock()
+			if updateErr := s.updateCurrencyRates(ctx); updateErr != nil {
+				s.mu.RLock()
+				return nil, errors.WrapServiceError(updateErr)
+			}
+			s.mu.RLock()
+
+			rates, repoErr = s.repo.GetCurrencyRates(ctx)
+			if repoErr != nil {
+				return nil, errors.WrapRepositoryError(repoErr)
+			}
+		}
+
+		return rates, nil
+	}
+	
+	wrappedHandler := s.interceptor.Chain(handler, "CachedCurrencyService.GetCurrencyRates")
+	resultInterface, err := wrappedHandler(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	
+	if resultInterface != nil {
+		result = resultInterface.([]domain.CurrencyRate)
+	}
+	
+	return result, err
 }
 
 func (s *CachedCurrencyService) ForceUpdate(ctx context.Context) error {
@@ -109,7 +128,7 @@ func (s *CachedCurrencyService) periodicUpdate(ctx context.Context) {
 func (s *CachedCurrencyService) updateIfNeeded(ctx context.Context) error {
 	lastUpdate, err := s.repo.GetLastUpdateTime(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to check last update time: %w", err)
+		return errors.WrapRepositoryError(err)
 	}
 
 	if lastUpdate == nil || time.Since(*lastUpdate) > CacheUpdateInterval {
@@ -129,7 +148,7 @@ func (s *CachedCurrencyService) updateCurrencyRates(ctx context.Context) error {
 
 	externalRates, err := s.externalService.GetCurrencyRates(ctx, time.Now())
 	if err != nil {
-		return fmt.Errorf("failed to fetch currency rates from external service: %w", err)
+		return errors.WrapExternalAPIError(err)
 	}
 
 	now := time.Now()
@@ -156,6 +175,6 @@ func (s *CachedCurrencyService) updateCurrencyRates(ctx context.Context) error {
 		}
 	}
 
-	log.Printf("Successfully updated %d currency rates", len(externalRates))
+	log.Printf("Successfully updated %s currency rates", app.FormatInteger(int64(len(externalRates))))
 	return nil
 }

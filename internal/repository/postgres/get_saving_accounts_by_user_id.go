@@ -3,8 +3,9 @@ package postgres
 import (
 	"context"
 	"database/sql"
-	"fmt"
+
 	"github.com/aniats/FiatFormaggio/internal/domain"
+	"github.com/aniats/FiatFormaggio/internal/errors"
 )
 
 func (repo *Repository) GetSavingAccountsByUserID(ctx context.Context, userId domain.UserId) ([]domain.SavingAccount, error) {
@@ -23,7 +24,7 @@ func (repo *Repository) GetSavingAccountsByUserID(ctx context.Context, userId do
 
 	rows, err := repo.db.QueryContext(ctx, query, userId)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query saving accounts for user %d: %w", userId, err)
+		return nil, errors.WrapRepositoryError(err)
 	}
 	defer rows.Close()
 
@@ -42,7 +43,7 @@ func (repo *Repository) GetSavingAccountsByUserID(ctx context.Context, userId do
 			&account.Currency,
 		)
 		if err != nil {
-			return nil, fmt.Errorf("failed to scan saving account row: %w", err)
+			return nil, errors.WrapRepositoryError(err)
 		}
 
 		if expirationDate.Valid {
@@ -52,7 +53,7 @@ func (repo *Repository) GetSavingAccountsByUserID(ctx context.Context, userId do
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating over saving account rows: %w", err)
+		return nil, errors.WrapRepositoryError(err)
 	}
 
 	return savingAccounts, nil

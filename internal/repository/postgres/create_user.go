@@ -2,8 +2,9 @@ package postgres
 
 import (
 	"context"
-	"fmt"
+
 	"github.com/aniats/FiatFormaggio/internal/domain"
+	"github.com/aniats/FiatFormaggio/internal/errors"
 )
 
 func (repo *Repository) CreateUser(ctx context.Context, user *domain.User) error {
@@ -19,7 +20,7 @@ func (repo *Repository) CreateUser(ctx context.Context, user *domain.User) error
         ) VALUES ($1, $2, $3, $4, $5, $6, $7)
 	`
 
-	err := repo.db.QueryRowContext(
+	_, err := repo.db.ExecContext(
 		ctx,
 		query,
 		user.UserId,
@@ -32,7 +33,7 @@ func (repo *Repository) CreateUser(ctx context.Context, user *domain.User) error
 	)
 
 	if err != nil {
-		return fmt.Errorf("failed to create user: %w", err)
+		return errors.WrapRepositoryError(err)
 	}
 
 	return nil

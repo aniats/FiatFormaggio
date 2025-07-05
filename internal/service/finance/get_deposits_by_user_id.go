@@ -2,13 +2,28 @@ package finance
 
 import (
 	"context"
+
 	"github.com/aniats/FiatFormaggio/internal/domain"
 )
 
 func (s *FinanceService) GetDepositsByUserID(ctx context.Context, userId domain.UserId) ([]domain.Deposit, error) {
-	result, err := s.repo.GetDepositsByUserID(ctx, userId)
+	var result []domain.Deposit
+	var err error
+	
+	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
+		deposits, repoErr := s.repo.GetDepositsByUserID(ctx, userId)
+		return deposits, repoErr
+	}
+	
+	wrappedHandler := s.interceptor.Chain(handler, "FinanceService.GetDepositsByUserID")
+	resultInterface, err := wrappedHandler(ctx, userId)
 	if err != nil {
 		return nil, err
 	}
-	return result, nil
+	
+	if resultInterface != nil {
+		result = resultInterface.([]domain.Deposit)
+	}
+	
+	return result, err
 }

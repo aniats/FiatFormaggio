@@ -7,10 +7,9 @@ import (
 )
 
 const (
-	// UpdateOffset Update offset constants
-	UpdateOffsetFromBeginning = 0  // Get all pending updates from start
-	UpdateOffsetOnlyNew       = -1 // Skip pending, get only new updates
-	UpdateOffsetResume        = 1  // Base for resuming from specific point
+	UpdateOffsetFromBeginning = 0
+	UpdateOffsetOnlyNew       = -1
+	UpdateOffsetResume        = 1
 )
 
 type TelegramBotAPI struct {
@@ -24,10 +23,8 @@ func NewTelegramBotAPI(token string) (BotAPI, error) {
 		return nil, err
 	}
 
-	// FYI: Start from `UpdateOffsetFromBeginning`
 	u := tgBotAPI.NewUpdate(UpdateOffsetFromBeginning)
 
-	// FYI: Wait up to `UpdateTimeoutSeconds` seconds for new messages
 	u.Timeout = UpdateTimeoutSeconds
 
 	updates := api.GetUpdatesChan(u)
@@ -48,6 +45,12 @@ func (t *TelegramBotAPI) SendMessage(chatID int64, text string) error {
 	return err
 }
 
+func (t *TelegramBotAPI) SetMyCommands(commands []tgBotAPI.BotCommand) error {
+	commandsConfig := tgBotAPI.NewSetMyCommands(commands...)
+	_, err := t.api.Request(commandsConfig)
+	return err
+}
+
 func (t *TelegramBotAPI) Close() {
 	t.api.StopReceivingUpdates()
 	log.Println("Telegram Bot API connection closed")
@@ -63,12 +66,6 @@ type MockMessage struct {
 	Text   string
 }
 
-func NewMockBotAPI() *MockBotAPI {
-	return &MockBotAPI{
-		updates: make(chan tgBotAPI.Update, 10),
-		sent:    make([]MockMessage, 0),
-	}
-}
 
 func (m *MockBotAPI) GetLastEvents() <-chan tgBotAPI.Update {
 	return m.updates
@@ -82,25 +79,13 @@ func (m *MockBotAPI) SendMessage(chatID int64, text string) error {
 	return nil
 }
 
+func (m *MockBotAPI) SetMyCommands(commands []tgBotAPI.BotCommand) error {
+	return nil
+}
+
 func (m *MockBotAPI) Close() {
 	close(m.updates)
 }
 
-func (m *MockBotAPI) AddUpdate(update tgBotAPI.Update) {
-	m.updates <- update
-}
 
-func (m *MockBotAPI) AddTestMessage(chatID, userID int64, username, text string) {
-	update := tgBotAPI.Update{
-		Message: &tgBotAPI.Message{
-			Chat: &tgBotAPI.Chat{ID: chatID},
-			From: &tgBotAPI.User{ID: userID, UserName: username},
-			Text: text,
-		},
-	}
-	m.updates <- update
-}
 
-func (m *MockBotAPI) GetSentMessages() []MockMessage {
-	return m.sent
-}

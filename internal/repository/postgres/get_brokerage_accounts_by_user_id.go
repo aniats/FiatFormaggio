@@ -3,8 +3,9 @@ package postgres
 import (
 	"context"
 	"database/sql"
-	"fmt"
+
 	"github.com/aniats/FiatFormaggio/internal/domain"
+	"github.com/aniats/FiatFormaggio/internal/errors"
 )
 
 func (repo *Repository) GetBrokerageAccountsByUserID(ctx context.Context, userId domain.UserId) ([]domain.BrokerageAccount, error) {
@@ -23,7 +24,7 @@ func (repo *Repository) GetBrokerageAccountsByUserID(ctx context.Context, userId
 
 	rows, err := repo.db.QueryContext(ctx, query, userId)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query brokerage accounts for user %d: %w", userId, err)
+		return nil, errors.WrapRepositoryError(err)
 	}
 	defer rows.Close()
 
@@ -42,7 +43,7 @@ func (repo *Repository) GetBrokerageAccountsByUserID(ctx context.Context, userId
 			&account.AccountType,
 		)
 		if err != nil {
-			return nil, fmt.Errorf("failed to scan brokerage account row: %w", err)
+			return nil, errors.WrapRepositoryError(err)
 		}
 
 		if brokerName.Valid {
@@ -53,7 +54,7 @@ func (repo *Repository) GetBrokerageAccountsByUserID(ctx context.Context, userId
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating over brokerage account rows: %w", err)
+		return nil, errors.WrapRepositoryError(err)
 	}
 
 	return brokerageAccounts, nil

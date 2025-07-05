@@ -2,78 +2,90 @@ package finance
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/aniats/FiatFormaggio/internal/domain"
+	"github.com/aniats/FiatFormaggio/internal/errors"
 	"github.com/aniats/FiatFormaggio/internal/service/finance/models"
 )
 
 func (s *FinanceService) CreateBrokerageAccount(ctx context.Context, req *models.CreateBrokerageAccountRequest) (*domain.BrokerageAccount, error) {
-	if err := s.validateCreateBrokerageAccountRequest(req); err != nil {
-		return nil, fmt.Errorf("validation failed: %w", err)
+	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
+		if err := s.validateCreateBrokerageAccountRequest(req); err != nil {
+			return nil, errors.WrapValidationError(err)
+		}
+
+		currency, err := s.validateAndNormalizeCurrency(req.Currency)
+		if err != nil {
+			return nil, errors.WrapValidationError(err)
+		}
+
+		accountType, err := s.parseBrokerageType(req.AccountType)
+		if err != nil {
+			return nil, errors.WrapValidationError(err)
+		}
+
+		amountMinorUnits := int64(req.AmountRUB * 100)
+
+		account := &domain.BrokerageAccount{
+			UserId:           req.UserID,
+			Name:             strings.TrimSpace(req.Name),
+			AmountMinorUnits: amountMinorUnits,
+			Currency:         currency,
+			Broker:           req.Broker,
+			AccountType:      accountType,
+		}
+
+		if err := s.repo.CreateBrokerageAccount(ctx, account); err != nil {
+			return nil, errors.WrapRepositoryError(err)
+		}
+
+		return account, nil
 	}
 
-	currency, err := s.validateAndNormalizeCurrency(req.Currency)
+	wrappedHandler := s.interceptor.Chain(handler, "FinanceService.CreateBrokerageAccount")
+	resultInterface, err := wrappedHandler(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("invalid currency: %w", err)
+		return nil, err
 	}
-
-	accountType, err := s.parseBrokerageType(req.AccountType)
-	if err != nil {
-		return nil, fmt.Errorf("invalid account type: %w", err)
+	if resultInterface != nil {
+		return resultInterface.(*domain.BrokerageAccount), nil
 	}
-
-	amountMinorUnits := int64(req.AmountRUB * 100)
-
-	account := &domain.BrokerageAccount{
-		UserId:           req.UserID,
-		Name:             strings.TrimSpace(req.Name),
-		AmountMinorUnits: amountMinorUnits,
-		Currency:         currency,
-		Broker:           req.Broker,
-		AccountType:      accountType,
-	}
-
-	if err := s.repo.CreateBrokerageAccount(ctx, account); err != nil {
-		return nil, fmt.Errorf("failed to create brokerage account: %w", err)
-	}
-
-	return account, nil
+	return nil, nil
 }
 
 func (s *FinanceService) validateCreateBrokerageAccountRequest(req *models.CreateBrokerageAccountRequest) error {
 	if req == nil {
-		return fmt.Errorf("request is nil")
+		return errors.ErrRequestNil
 	}
 
 	if req.UserID <= 0 {
-		return fmt.Errorf("ID пользователя должен быть положительным")
+		return errors.ErrInvalidUserID
 	}
 
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
-		return fmt.Errorf("название обязательно")
+		return errors.ErrNameRequired
 	}
 
 	if len(name) > 255 {
-		return fmt.Errorf("название слишком длинное (максимум 255 символов)")
+		return errors.ErrNameTooLong
 	}
 
 	if req.AmountRUB < 0 {
-		return fmt.Errorf("сумма не может быть отрицательной")
+		return errors.ErrAmountNegative
 	}
 
 	if req.AmountRUB > 1000000000 {
-		return fmt.Errorf("amount too large (max 1,000,000,000)")
+		return errors.ErrAmountTooLarge
 	}
 
 	if req.Currency == "" {
-		return fmt.Errorf("currency is required")
+		return errors.ErrCurrencyRequired
 	}
 
 	if req.AccountType == "" {
-		return fmt.Errorf("account type is required")
+		return errors.ErrAccountTypeRequired
 	}
 
 	return nil
@@ -94,6 +106,6 @@ func (s *FinanceService) parseBrokerageType(accountTypeStr string) (domain.Broke
 	case "margin", "маржинальный":
 		return domain.Margin, nil
 	default:
-		return "", fmt.Errorf("unsupported account type: %s. Supported types: regular, iis, iis3, ira, margin", accountTypeStr)
+		return "", errors.NewUnsupportedAccountTypeError(accountTypeStr)
 	}
 }

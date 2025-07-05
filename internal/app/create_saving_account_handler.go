@@ -3,11 +3,13 @@ package app
 import (
 	"context"
 	"fmt"
-	"github.com/aniats/FiatFormaggio/internal/domain"
-	"github.com/aniats/FiatFormaggio/internal/service/finance/models"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/aniats/FiatFormaggio/internal/domain"
+	"github.com/aniats/FiatFormaggio/internal/errors"
+	"github.com/aniats/FiatFormaggio/internal/service/finance/models"
 )
 
 type SavingAccountCreationHandler struct{}
@@ -17,6 +19,22 @@ func (h *SavingAccountCreationHandler) GetSessionType() SessionType {
 }
 
 func (h *SavingAccountCreationHandler) HandleStep(ctx context.Context, bot *Bot, session *UserSession, msg *Message) error {
+	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
+		return nil, h.processStep(ctx, bot, session, msg)
+	}
+
+	params := map[string]interface{}{
+		"user_id":      int64(session.UserID),
+		"session_step": string(session.CurrentStep),
+		"session_type": "create_saving_account",
+	}
+
+	wrappedHandler := bot.interceptor.Chain(handler, "SavingAccountCreationHandler.HandleStep")
+	_, err := wrappedHandler(ctx, params)
+	return err
+}
+
+func (h *SavingAccountCreationHandler) processStep(ctx context.Context, bot *Bot, session *UserSession, msg *Message) error {
 	switch session.CurrentStep {
 	case StepStart:
 		return h.handleStart(bot, session)
@@ -33,7 +51,7 @@ func (h *SavingAccountCreationHandler) HandleStep(ctx context.Context, bot *Bot,
 	case StepConfirmation:
 		return h.handleConfirmation(ctx, bot, session, msg.Text)
 	default:
-		return fmt.Errorf("неизвестный шаг: %s", session.CurrentStep)
+		return errors.ErrUnknownStep.WithContext("step", session.CurrentStep)
 	}
 }
 
@@ -92,14 +110,14 @@ func (h *SavingAccountCreationHandler) handleAmount(bot *Bot, session *UserSessi
 	}
 
 	if amount > 1000000000 {
-		bot.sendMessage(session.ChatID, "❌ Слишком большая сумма (максимум 1,000,000,000). Попробуйте еще раз:")
+		bot.sendMessage(session.ChatID, fmt.Sprintf("❌ Слишком большая сумма (максимум %s). Попробуйте еще раз:", FormatInteger(1000000000)))
 		return nil
 	}
 
 	session.SetData("amount", amount)
 	session.CurrentStep = StepCurrency
 
-	text := fmt.Sprintf(`✅ Сумма: %.2f
+	text := fmt.Sprintf(`✅ Сумма: %s
 
 	Шаг 3/6: Выберите валюту счета
 	Доступные варианты:
@@ -109,7 +127,7 @@ func (h *SavingAccountCreationHandler) handleAmount(bot *Bot, session *UserSessi
 	• CNY, юань - Китайский юань ¥
 	• GBP, фунт - Британский фунт £
 	
-	По умолчанию: RUB (введите "пропустить" для RUB)`, amount)
+	По умолчанию: RUB (введите "пропустить" для RUB)`, FormatNumber(amount))
 
 	bot.sendMessage(session.ChatID, text)
 	return nil
@@ -118,7 +136,7 @@ func (h *SavingAccountCreationHandler) handleAmount(bot *Bot, session *UserSessi
 func (h *SavingAccountCreationHandler) handleCurrency(bot *Bot, session *UserSession, input string) error {
 	currencyStr := strings.TrimSpace(input)
 
-	if strings.ToLower(currencyStr) == "пропустить" || currencyStr == "" {
+	if IsSkipResponse(currencyStr) || currencyStr == "" {
 		session.SetData("currency", domain.RUB)
 		session.CurrentStep = StepInterestRate
 		h.sendInterestRatePrompt(bot, session)
@@ -169,7 +187,7 @@ func (h *SavingAccountCreationHandler) sendInterestRatePrompt(bot *Bot, session 
 func (h *SavingAccountCreationHandler) handleInterestRate(bot *Bot, session *UserSession, input string) error {
 	rateStr := strings.TrimSpace(input)
 
-	if strings.ToLower(rateStr) == "пропустить" || rateStr == "" {
+	if IsSkipResponse(rateStr) || rateStr == "" {
 		session.SetData("interestRate", nil)
 		session.CurrentStep = StepDate
 		h.sendExpirationDatePrompt(bot, session)
@@ -200,14 +218,14 @@ func (h *SavingAccountCreationHandler) sendExpirationDatePrompt(bot *Bot, sessio
 	if rateData != nil {
 		rate := rateData.(*float64)
 		if rate != nil {
-			rateText = fmt.Sprintf("%.2f%%", *rate)
+			rateText = fmt.Sprintf("%s%%", FormatRate(*rate))
 		}
 	}
 
 	text := fmt.Sprintf(`✅ Процентная ставка: %s
 
 	Шаг 5/6: Введите дату окончания действия счета (необязательно)
-	Форматы: 31.12.2025, 2025-12-31
+	Форматы: 31.12.2025, 2025-12-31, 
 	
 	Введите "пропустить" если не хотите указывать дату`, rateText)
 
@@ -217,7 +235,7 @@ func (h *SavingAccountCreationHandler) sendExpirationDatePrompt(bot *Bot, sessio
 func (h *SavingAccountCreationHandler) handleExpirationDate(bot *Bot, session *UserSession, input string) error {
 	dateStr := strings.TrimSpace(input)
 
-	if strings.ToLower(dateStr) == "пропустить" || dateStr == "" {
+	if IsSkipResponse(dateStr) || dateStr == "" {
 		session.SetData("expirationDate", nil)
 		session.CurrentStep = StepConfirmation
 		h.sendConfirmation(bot, session)
@@ -256,17 +274,17 @@ func (h *SavingAccountCreationHandler) parseDate(input string) (*time.Time, erro
 		}
 	}
 
-	return nil, fmt.Errorf("неподдерживаемый формат даты")
+	return nil, errors.ErrInvalidDateFormat
 }
 
 func (h *SavingAccountCreationHandler) validateDate(date *time.Time) error {
 	if date.Before(time.Now()) {
-		return fmt.Errorf("дата не может быть в прошлом")
+		return errors.ErrDateInPast
 	}
 
 	maxDate := time.Now().AddDate(10, 0, 0)
 	if date.After(maxDate) {
-		return fmt.Errorf("дата не может быть более чем через 10 лет")
+		return errors.ErrDateTooFar
 	}
 
 	return nil
@@ -282,7 +300,7 @@ func (h *SavingAccountCreationHandler) sendConfirmation(bot *Bot, session *UserS
 	if rateData != nil {
 		rate := rateData.(*float64)
 		if rate != nil {
-			rateText = fmt.Sprintf("%.2f%%", *rate)
+			rateText = fmt.Sprintf("%s%%", FormatRate(*rate))
 		}
 	}
 
@@ -315,25 +333,42 @@ func (h *SavingAccountCreationHandler) sendConfirmation(bot *Bot, session *UserS
 }
 
 func (h *SavingAccountCreationHandler) handleConfirmation(ctx context.Context, bot *Bot, session *UserSession, input string) error {
-	response := strings.ToLower(strings.TrimSpace(input))
-
-	if response == "нет" || response == "отмена" {
+	if IsNegativeResponse(input) {
 		bot.sessionManager.ClearSession(session.UserID)
 		bot.sendMessage(session.ChatID, "❌ Создание накопительного счета отменено.")
 		return nil
 	}
 
-	if response != "да" && response != "yes" && response != "подтверждаю" {
-		bot.sendMessage(session.ChatID, "Пожалуйста, ответьте 'да' для подтверждения или 'нет' для отмены:")
+	if !IsPositiveResponse(input) {
+		if IsValidResponse(input) {
+			bot.sendMessage(session.ChatID, "Пожалуйста, ответьте 'да' для подтверждения или 'нет' для отмены:")
+		} else {
+			bot.sendMessage(session.ChatID, GetSuggestionMessage())
+		}
 		return nil
 	}
 
-	// Prevent double execution by clearing session first
 	bot.sessionManager.ClearSession(session.UserID)
 	return h.CompleteSession(ctx, bot, session)
 }
 
 func (h *SavingAccountCreationHandler) CompleteSession(ctx context.Context, bot *Bot, session *UserSession) error {
+	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
+		return nil, h.executeCompletion(ctx, bot, session)
+	}
+
+	name := session.GetData("name").(string)
+	params := map[string]interface{}{
+		"user_id":             int64(session.UserID),
+		"saving_account_name": name,
+	}
+
+	wrappedHandler := bot.interceptor.Chain(handler, "SavingAccountCreationHandler.CompleteSession")
+	_, err := wrappedHandler(ctx, params)
+	return err
+}
+
+func (h *SavingAccountCreationHandler) executeCompletion(ctx context.Context, bot *Bot, session *UserSession) error {
 	name := session.GetData("name").(string)
 	amount := session.GetData("amount").(float64)
 	currency := session.GetData("currency").(domain.CurrencyName)
@@ -363,28 +398,31 @@ func (h *SavingAccountCreationHandler) CompleteSession(ctx context.Context, bot 
 		return err
 	}
 
-	rateText := "Не указана"
-	if interestRate != nil {
-		rateText = fmt.Sprintf("%.2f%%", *interestRate)
+	rateText := "не указана"
+	if account.InterestRateBasisPoints > 0 {
+		rate := float64(account.InterestRateBasisPoints) / 100.0
+		rateText = fmt.Sprintf("%s%%", FormatNumber(rate))
 	}
 
-	dateText := "Не указана"
-	if expirationDate != nil {
-		dateText = expirationDate.Format("02.01.2006")
+	dateText := "не указана"
+	if account.ExpirationDate != nil {
+		dateText = account.ExpirationDate.Format("02.01.2006")
 	}
 
 	text := fmt.Sprintf(`✅ Накопительный счет успешно создан!
 
-	📝 Название: %s
-	💰 Сумма: %s
-	📈 Процентная ставка: %s
-	📅 Дата окончания: %s
+📝 Название: %s
+💰 Сумма: %s
+📈 Процентная ставка: %s
+📅 Дата окончания: %s
+🆔 ID: %s
 
-	Используйте /saving_accounts чтобы посмотреть все ваши накопительные счета.`,
+Используйте /saving_accounts чтобы посмотреть все ваши накопительные счета.`,
 		account.Name,
 		currency.FormatAmountRussian(amount),
 		rateText,
-		dateText)
+		dateText,
+		FormatInteger(int64(account.Id)))
 
 	bot.sendMessage(session.ChatID, text)
 	return nil

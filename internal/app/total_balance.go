@@ -5,16 +5,33 @@ import (
 	"fmt"
 	"sort"
 
-	"strings"
-
 	"github.com/aniats/FiatFormaggio/internal/domain"
 )
 
 func (b *Bot) sendTotalBalanceCommand(ctx context.Context, chatID int64, userID domain.UserId) {
+	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
+		params := input.(map[string]interface{})
+		chatID := params["chatID"].(int64)
+		userID := params["userID"].(domain.UserId)
+		
+		return b.processTotalBalanceCommand(ctx, chatID, userID)
+	}
+	
+	params := map[string]interface{}{
+		"chatID": chatID,
+		"userID": userID,
+	}
+	
+	wrappedHandler := b.interceptor.Chain(handler, "Bot.sendTotalBalanceCommand")
+	_, _ = wrappedHandler(ctx, params)
+}
+
+func (b *Bot) processTotalBalanceCommand(ctx context.Context, chatID int64, userID domain.UserId) (interface{}, error) {
+
 	rates, err := b.currencyService.GetCurrencyRates(ctx)
 	if err != nil {
 		b.sendMessage(chatID, "❌ Ошибка получения курсов валют. Попробуйте позже.")
-		return
+		return nil, err
 	}
 
 	exchangeRates := buildExchangeRateMap(rates)
@@ -41,7 +58,7 @@ func (b *Bot) sendTotalBalanceCommand(ctx context.Context, chatID int64, userID 
 
 		for _, currency := range currencies {
 			rate := exchangeRates[currency]
-			message += fmt.Sprintf("  %s: %.4f ₽\n", currency, rate)
+			message += fmt.Sprintf("  %s: %s ₽\n", currency, FormatRate(rate))
 		}
 		message += "\n"
 	}
@@ -70,8 +87,9 @@ func (b *Bot) sendTotalBalanceCommand(ctx context.Context, chatID int64, userID 
 		grandTotalRUB += totalRUB
 	}
 
-	message += fmt.Sprintf("🎯 ИТОГО: %s ₽\n", formatNumber(grandTotalRUB))
+	message += fmt.Sprintf("🎯 ИТОГО: %s ₽\n", FormatNumber(grandTotalRUB))
 	b.sendMessage(chatID, message)
+	return nil, nil
 }
 
 func buildExchangeRateMap(rates []domain.CurrencyRate) map[domain.CurrencyName]float64 {
@@ -81,7 +99,7 @@ func buildExchangeRateMap(rates []domain.CurrencyRate) map[domain.CurrencyName]f
 
 	for _, rate := range rates {
 		if rate.BaseCurrency == domain.RUB {
-			exchangeRates[rate.Currency] = float64(rate.RateMinorUnits) / 100.0
+			exchangeRates[rate.Currency] = float64(rate.RateMinorUnits) / DefaultMinorUnits
 		}
 	}
 
@@ -103,7 +121,7 @@ func calculateDepositsSummary(deposits []domain.Deposit, exchangeRates map[domai
 	var totalRUB float64
 
 	for _, deposit := range deposits {
-		amount := float64(deposit.AmountMinorUnits) / 100.0
+		amount := float64(deposit.AmountMinorUnits) / DefaultMinorUnits
 		currency := deposit.Currency
 		amountRUB := convertToRUB(amount, currency, exchangeRates)
 
@@ -119,7 +137,7 @@ func calculateSavingAccountsSummary(accounts []domain.SavingAccount, exchangeRat
 	var totalRUB float64
 
 	for _, account := range accounts {
-		amount := float64(account.AmountMinorUnits) / 100.0
+		amount := float64(account.AmountMinorUnits) / DefaultMinorUnits
 		currency := account.Currency
 		amountRUB := convertToRUB(amount, currency, exchangeRates)
 
@@ -135,7 +153,7 @@ func calculateBrokerageAccountsSummary(accounts []domain.BrokerageAccount, excha
 	var totalRUB float64
 
 	for _, account := range accounts {
-		amount := float64(account.AmountMinorUnits) / 100.0
+		amount := float64(account.AmountMinorUnits) / DefaultMinorUnits
 		currency := account.Currency
 		amountRUB := convertToRUB(amount, currency, exchangeRates)
 
@@ -151,7 +169,7 @@ func calculateCashHoldingsSummary(holdings []domain.CashHolding, exchangeRates m
 	var totalRUB float64
 
 	for _, holding := range holdings {
-		amount := float64(holding.AmountMinorUnits) / 100.0
+		amount := float64(holding.AmountMinorUnits) / DefaultMinorUnits
 		currency := holding.Currency
 		amountRUB := convertToRUB(amount, currency, exchangeRates)
 
@@ -163,7 +181,7 @@ func calculateCashHoldingsSummary(holdings []domain.CashHolding, exchangeRates m
 }
 
 func formatAccountSummary(accountType string, count int64, currencyTotals map[domain.CurrencyName]float64, totalRUB float64, exchangeRates map[domain.CurrencyName]float64) string {
-	message := fmt.Sprintf("📊 %s (%d):\n", accountType, count)
+	message := fmt.Sprintf("📊 %s (%s):\n", accountType, FormatInteger(count))
 
 	var currencies []domain.CurrencyName
 	for currency := range currencyTotals {
@@ -175,35 +193,16 @@ func formatAccountSummary(accountType string, count int64, currencyTotals map[do
 
 	for _, currency := range currencies {
 		amount := currencyTotals[currency]
-		message += fmt.Sprintf("  %s: %s %s", currency, formatNumber(amount), currency.Symbol())
+		message += fmt.Sprintf("  %s: %s %s", currency, FormatNumber(amount), currency.Symbol())
 
 		if currency != domain.RUB {
 			rubEquivalent := amount * exchangeRates[currency]
-			message += fmt.Sprintf(" (%s ₽)", formatNumber(rubEquivalent))
+			message += fmt.Sprintf(" (%s ₽)", FormatNumber(rubEquivalent))
 		}
 		message += "\n"
 	}
 
-	message += fmt.Sprintf("  Всего: %s ₽\n\n", formatNumber(totalRUB))
+	message += fmt.Sprintf("  Всего: %s ₽\n\n", FormatNumber(totalRUB))
 	return message
 }
 
-func formatNumber(num float64) string {
-	str := fmt.Sprintf("%.2f", num)
-	parts := strings.Split(str, ".")
-	intPart := parts[0]
-	decPart := parts[1]
-
-	if len(intPart) > 3 {
-		var result strings.Builder
-		for i, digit := range intPart {
-			if i > 0 && (len(intPart)-i)%3 == 0 {
-				result.WriteString(",")
-			}
-			result.WriteRune(digit)
-		}
-		intPart = result.String()
-	}
-
-	return intPart + "." + decPart
-}
