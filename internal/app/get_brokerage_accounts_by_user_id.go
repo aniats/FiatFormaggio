@@ -31,6 +31,7 @@ func (b *Bot) processBrokerageAccountsCommand(ctx context.Context, chatID int64,
 
 	if len(accounts) == 0 {
 		b.sendMessage(chatID, "📭 У вас пока нет сохраненных брокерских счетов.\n\nСоздайте первый счет: /create_brokerage_account")
+		b.sendMainMenu(chatID)
 		return nil, nil
 	}
 
@@ -52,5 +53,6 @@ func (b *Bot) processBrokerageAccountsCommand(ctx context.Context, chatID int64,
 	text += fmt.Sprintf("📊 Всего счетов: %s", FormatInteger(int64(len(accounts))))
 
 	b.sendMessage(chatID, text)
+	b.sendMainMenu(chatID)
 	return nil, nil
 }

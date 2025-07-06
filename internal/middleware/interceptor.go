@@ -13,8 +13,12 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+type TracerInterface interface {
+	Start(ctx context.Context, spanName string, opts ...trace.SpanStartOption) (context.Context, trace.Span)
+}
+
 type Interceptor struct {
-	tracer      trace.Tracer
+	tracer      TracerInterface
 	middlewares []Middleware
 	config      *InterceptorConfig
 }
@@ -121,8 +125,10 @@ func (ui *Interceptor) profilingMiddleware(next Handler) Handler {
 		labels := pprof.Labels("operation", opName)
 		ctx = pprof.WithLabels(ctx, labels)
 
-		var result interface{}
-		var err error
+		var (
+			result interface{}
+			err    error
+		)
 
 		pprof.Do(ctx, labels, func(labeledCtx context.Context) {
 			result, err = next(labeledCtx, input)

@@ -87,7 +87,7 @@ func (h *SavingAccountCreationHandler) handleName(bot *Bot, session *UserSession
 	text := fmt.Sprintf(`✅ Название: "%s"
 
 	Шаг 2/6: Введите текущую сумму на счете
-	Например: 25000, 1000.50, 0
+	Например: 25,000; 1,000.50; 0
 	
 	Валюта будет указана на следующем шаге.`, name)
 
@@ -119,24 +119,41 @@ func (h *SavingAccountCreationHandler) handleAmount(bot *Bot, session *UserSessi
 
 	text := fmt.Sprintf(`✅ Сумма: %s
 
-	Шаг 3/6: Выберите валюту счета
-	Доступные варианты:
-	• RUB, рубль - Российский рубль ₽
-	• USD, доллар - Американский доллар $
-	• EUR, евро - Евро €
-	• CNY, юань - Китайский юань ¥
-	• GBP, фунт - Британский фунт £
-	
-	По умолчанию: RUB (введите "пропустить" для RUB)`, FormatNumber(amount))
+Шаг 3/6: Выберите валюту счета
 
-	bot.sendMessage(session.ChatID, text)
+💰 Выберите валюту из списка ниже или введите код валюты:`, FormatNumber(amount))
+
+	keyboard := CreateCurrencySelectionKeyboard()
+	bot.sendMessageWithKeyboard(session.ChatID, text, keyboard)
 	return nil
 }
 
 func (h *SavingAccountCreationHandler) handleCurrency(bot *Bot, session *UserSession, input string) error {
 	currencyStr := strings.TrimSpace(input)
 
-	if IsSkipResponse(currencyStr) || currencyStr == "" {
+	if strings.HasPrefix(input, CallbackCurrencyPrefix) {
+		currencyCode := strings.TrimPrefix(input, CallbackCurrencyPrefix)
+
+		if currencyCode == "skip" {
+			session.SetData("currency", domain.RUB)
+			session.CurrentStep = StepInterestRate
+			h.sendInterestRatePrompt(bot, session)
+			return nil
+		}
+
+		currency := domain.CurrencyName(currencyCode)
+		if !currency.IsValid() {
+			bot.sendMessage(session.ChatID, "❌ Неизвестная валюта. Используйте кнопки выше для выбора:")
+			return nil
+		}
+
+		session.SetData("currency", currency)
+		session.CurrentStep = StepInterestRate
+		h.sendInterestRatePrompt(bot, session)
+		return nil
+	}
+
+	if IsSkipResponse(currencyStr) {
 		session.SetData("currency", domain.RUB)
 		session.CurrentStep = StepInterestRate
 		h.sendInterestRatePrompt(bot, session)
@@ -148,13 +165,17 @@ func (h *SavingAccountCreationHandler) handleCurrency(bot *Bot, session *UserSes
 		text := fmt.Sprintf(`❌ Неизвестная валюта "%s"
 
 		Доступные варианты:
-		• RUB, рубль, российский рубль
-		• USD, доллар, американский доллар  
-		• EUR, евро
-		• CNY, юань, китайский юань
-		• GBP, фунт, британский фунт
+		• RUB - Российский рубль ₽
+		• USD - Доллар США $
+		• EUR - Евро €
+		• GBP - Британский фунт £
+		• JPY - Японская иена ¥
+		• CNY - Китайский юань ¥
+		• RSD - Сербский динар
+		• XBT - Биткоин ₿
+		• KZT - Казахстанский тенге
 		
-		Попробуйте еще раз:`, currencyStr)
+		Используйте кнопки выше или введите код валюты:`, currencyStr)
 		bot.sendMessage(session.ChatID, text)
 		return nil
 	}
@@ -170,13 +191,15 @@ func (h *SavingAccountCreationHandler) sendInterestRatePrompt(bot *Bot, session 
 	currency := session.GetData("currency").(domain.CurrencyName)
 	amount := session.GetData("amount").(float64)
 
-	text := fmt.Sprintf(`✅ Валюта: %s (%s)
-	✅ Сумма: %s
-
-	Шаг 4/6: Введите процентную ставку (необязательно)
-	Например: 5.5, 7.2, 4
+	text := fmt.Sprintf(`
+		✅ Валюта: %s (%s)
+		✅ Сумма: %s
 	
-	Введите "пропустить" если не хотите указывать ставку`,
+		Шаг 4/6: Введите процентную ставку (необязательно)
+		Например: 5.5, 7.2, 4
+		
+		Введите "пропустить" если не хотите указывать ставку
+		`,
 		currency.ToHumanRussian(),
 		currency.Symbol(),
 		currency.FormatAmountRussian(amount))
@@ -242,7 +265,6 @@ func (h *SavingAccountCreationHandler) handleExpirationDate(bot *Bot, session *U
 	return HandleExpirationDate(bot, session, input, handler)
 }
 
-
 func (h *SavingAccountCreationHandler) sendConfirmation(bot *Bot, session *UserSession) {
 	name := session.GetData("name").(string)
 	amount := session.GetData("amount").(float64)
@@ -268,13 +290,13 @@ func (h *SavingAccountCreationHandler) sendConfirmation(bot *Bot, session *UserS
 
 	text := fmt.Sprintf(`💰 Подтверждение создания накопительного счета
 
-		📝 Название: %s
-		💰 Сумма: %s
-		💱 Валюта: %s (%s)
-		📈 Процентная ставка: %s
-		📅 Дата окончания: %s
+	📝 Название: %s
+	💰 Сумма: %s
+	💱 Валюта: %s (%s)
+	📈 Процентная ставка: %s
+	📅 Дата окончания: %s
 	
-		Все верно? Отправьте "да" для создания счета или "нет" для отмены.`,
+	🔍 Подтвердите создание накопительного счета:`,
 		name,
 		currency.FormatAmountRussian(amount),
 		currency.ToHumanRussian(),
@@ -282,10 +304,22 @@ func (h *SavingAccountCreationHandler) sendConfirmation(bot *Bot, session *UserS
 		rateText,
 		dateText)
 
-	bot.sendMessage(session.ChatID, text)
+	keyboard := CreateConfirmationKeyboard(CallbackConfirmSavingYes, CallbackConfirmSavingNo)
+	bot.sendMessageWithKeyboard(session.ChatID, text, keyboard)
 }
 
 func (h *SavingAccountCreationHandler) handleConfirmation(ctx context.Context, bot *Bot, session *UserSession, input string) error {
+	if input == CallbackConfirmSavingYes {
+		bot.sessionManager.ClearSession(session.UserID)
+		return h.CompleteSession(ctx, bot, session)
+	}
+
+	if input == CallbackConfirmSavingNo {
+		bot.sessionManager.ClearSession(session.UserID)
+		bot.sendMessage(session.ChatID, "❌ Создание накопительного счета отменено.")
+		return nil
+	}
+
 	if IsNegativeResponse(input) {
 		bot.sessionManager.ClearSession(session.UserID)
 		bot.sendMessage(session.ChatID, "❌ Создание накопительного счета отменено.")
@@ -294,7 +328,7 @@ func (h *SavingAccountCreationHandler) handleConfirmation(ctx context.Context, b
 
 	if !IsPositiveResponse(input) {
 		if IsValidResponse(input) {
-			bot.sendMessage(session.ChatID, "Пожалуйста, ответьте 'да' для подтверждения или 'нет' для отмены:")
+			bot.sendMessage(session.ChatID, "❓ Используйте кнопки выше или введите 'да' для создания или 'нет' для отмены:")
 		} else {
 			bot.sendMessage(session.ChatID, GetSuggestionMessage())
 		}
@@ -378,6 +412,7 @@ func (h *SavingAccountCreationHandler) executeCompletion(ctx context.Context, bo
 		FormatInteger(int64(account.Id)))
 
 	bot.sendMessage(session.ChatID, text)
+	bot.sendMainMenu(session.ChatID)
 	return nil
 }
 

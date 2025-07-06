@@ -76,7 +76,7 @@ func (h *CashHoldingCreationHandler) handleName(bot *Bot, session *UserSession, 
 	text := fmt.Sprintf(`✅ Название: "%s"
 
 	Шаг 2/4: Введите сумму наличных
-	Например: 5000, 1500.50, 100
+	Например: 5,000; 1,500.50; 100
 	
 	Валюта будет указана на следующем шаге.`, name)
 
@@ -103,24 +103,41 @@ func (h *CashHoldingCreationHandler) handleAmount(bot *Bot, session *UserSession
 
 	text := fmt.Sprintf(`✅ Сумма: %s
 
-	Шаг 3/4: Выберите валюту
-	Доступные варианты:
-	• RUB, рубль - Российский рубль ₽
-	• USD, доллар - Американский доллар $
-	• EUR, евро - Евро €
-	• CNY, юань - Китайский юань ¥
-	• GBP, фунт - Британский фунт £
-	
-	По умолчанию: RUB (введите "пропустить" для RUB)`, FormatNumber(amount))
+Шаг 3/4: Выберите валюту
 
-	bot.sendMessage(session.ChatID, text)
+💰 Выберите валюту из списка ниже или введите код валюты:`, FormatNumber(amount))
+
+	keyboard := CreateCurrencySelectionKeyboard()
+	bot.sendMessageWithKeyboard(session.ChatID, text, keyboard)
 	return nil
 }
 
 func (h *CashHoldingCreationHandler) handleCurrency(bot *Bot, session *UserSession, input string) error {
 	currencyStr := strings.TrimSpace(input)
 
-	if IsSkipResponse(currencyStr) || currencyStr == "" {
+	if strings.HasPrefix(input, CallbackCurrencyPrefix) {
+		currencyCode := strings.TrimPrefix(input, CallbackCurrencyPrefix)
+
+		if currencyCode == "skip" {
+			session.SetData("currency", domain.RUB)
+			session.CurrentStep = StepConfirmation
+			h.sendConfirmation(bot, session)
+			return nil
+		}
+
+		currency := domain.CurrencyName(currencyCode)
+		if !currency.IsValid() {
+			bot.sendMessage(session.ChatID, "❌ Неизвестная валюта. Используйте кнопки выше для выбора:")
+			return nil
+		}
+
+		session.SetData("currency", currency)
+		session.CurrentStep = StepConfirmation
+		h.sendConfirmation(bot, session)
+		return nil
+	}
+
+	if IsSkipResponse(currencyStr) {
 		session.SetData("currency", domain.RUB)
 		session.CurrentStep = StepConfirmation
 		h.sendConfirmation(bot, session)
@@ -129,8 +146,21 @@ func (h *CashHoldingCreationHandler) handleCurrency(bot *Bot, session *UserSessi
 
 	currency, err := domain.CurrencyFromHuman(currencyStr)
 	if err != nil {
-		currencyErr := errors.NewCurrencyError(currencyStr)
-		bot.sendMessage(session.ChatID, errors.GetUserMessage(currencyErr))
+		text := fmt.Sprintf(`❌ Неизвестная валюта "%s"
+
+Доступные варианты:
+• RUB - Российский рубль ₽
+• USD - Доллар США $
+• EUR - Евро €
+• GBP - Британский фунт £
+• JPY - Японская иена ¥
+• CNY - Китайский юань ¥
+• RSD - Сербский динар
+• XBT - Биткоин ₿
+• KZT - Казахстанский тенге
+
+Используйте кнопки выше или введите код валюты:`, currencyStr)
+		bot.sendMessage(session.ChatID, text)
 		return nil
 	}
 
@@ -148,20 +178,32 @@ func (h *CashHoldingCreationHandler) sendConfirmation(bot *Bot, session *UserSes
 
 	text := fmt.Sprintf(`💵 Подтверждение создания наличного счета
 
-	📝 Название: %s
-	💰 Сумма: %s
-	💱 Валюта: %s (%s)
+📝 Название: %s
+💰 Сумма: %s
+💱 Валюта: %s (%s)
 
-	Все верно? Отправьте "да" для создания счета или "нет" для отмены.`,
+🔍 Подтвердите создание наличного счета:`,
 		name,
 		currency.FormatAmountRussian(amount),
 		currency.ToHumanRussian(),
 		currency.Symbol())
 
-	bot.sendMessage(session.ChatID, text)
+	keyboard := CreateConfirmationKeyboard(CallbackConfirmCashYes, CallbackConfirmCashNo)
+	bot.sendMessageWithKeyboard(session.ChatID, text, keyboard)
 }
 
 func (h *CashHoldingCreationHandler) handleConfirmation(ctx context.Context, bot *Bot, session *UserSession, input string) error {
+	if input == CallbackConfirmCashYes {
+		bot.sessionManager.ClearSession(session.UserID)
+		return h.CompleteSession(ctx, bot, session)
+	}
+
+	if input == CallbackConfirmCashNo {
+		bot.sessionManager.ClearSession(session.UserID)
+		bot.sendMessage(session.ChatID, "❌ Создание наличного счета отменено.")
+		return nil
+	}
+
 	if IsNegativeResponse(input) {
 		bot.sessionManager.ClearSession(session.UserID)
 		bot.sendMessage(session.ChatID, "❌ Создание наличного счета отменено.")
@@ -170,7 +212,7 @@ func (h *CashHoldingCreationHandler) handleConfirmation(ctx context.Context, bot
 
 	if !IsPositiveResponse(input) {
 		if IsValidResponse(input) {
-			bot.sendMessage(session.ChatID, "Пожалуйста, ответьте 'да' для подтверждения или 'нет' для отмены:")
+			bot.sendMessage(session.ChatID, "❓ Используйте кнопки выше или введите 'да' для создания или 'нет' для отмены:")
 		} else {
 			bot.sendMessage(session.ChatID, GetSuggestionMessage())
 		}
@@ -211,8 +253,8 @@ func (h *CashHoldingCreationHandler) executeCompletion(ctx context.Context, bot 
 
 	cashHolding, err := bot.financeService.CreateCashHolding(ctx, req)
 	if err != nil {
-		serviceErr := errors.WrapError(err, errors.CodeInternalError, 
-			"Failed to create cash holding", 
+		serviceErr := errors.WrapError(err, errors.CodeInternalError,
+			"Failed to create cash holding",
 			"❌ Ошибка при создании наличного счета. Попробуйте позже.")
 		bot.sendMessage(session.ChatID, errors.GetUserMessage(serviceErr))
 		return serviceErr
@@ -230,6 +272,7 @@ func (h *CashHoldingCreationHandler) executeCompletion(ctx context.Context, bot 
 		FormatInteger(int64(cashHolding.Id)))
 
 	bot.sendMessage(session.ChatID, text)
+	bot.sendMainMenu(session.ChatID)
 	return nil
 }
 

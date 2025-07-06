@@ -31,6 +31,7 @@ func (b *Bot) processSavingAccountsCommand(ctx context.Context, chatID int64, us
 
 	if len(accounts) == 0 {
 		b.sendMessage(chatID, "📭 У вас пока нет сохраненных накопительных счетов.\n\nСоздайте первый счет: /create_saving_account")
+		b.sendMainMenu(chatID)
 		return nil, nil
 	}
 
@@ -55,5 +56,6 @@ func (b *Bot) processSavingAccountsCommand(ctx context.Context, chatID int64, us
 	text += fmt.Sprintf("📊 Всего счетов: %s", FormatInteger(int64(len(accounts))))
 
 	b.sendMessage(chatID, text)
+	b.sendMainMenu(chatID)
 	return nil, nil
 }

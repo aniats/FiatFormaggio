@@ -29,7 +29,7 @@ const (
 var (
 	ErrInvalidCurrency = NewBusinessError(
 		CodeInvalidCurrency,
-		"❌ Неподдерживаемая валюта. Доступные: RUB, USD, EUR, CNY, GBP.",
+		"❌ Неподдерживаемая валюта. Доступные: RUB, USD, EUR, GBP, JPY, CNY, RSD, XBT, KZT.",
 	)
 
 	ErrInvalidInput = NewBusinessError(

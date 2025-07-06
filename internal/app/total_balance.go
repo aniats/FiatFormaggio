@@ -89,6 +89,7 @@ func (b *Bot) processTotalBalanceCommand(ctx context.Context, chatID int64, user
 
 	message += fmt.Sprintf("🎯 ИТОГО: %s ₽\n", FormatNumber(grandTotalRUB))
 	b.sendMessage(chatID, message)
+	b.sendMainMenu(chatID)
 	return nil, nil
 }
 

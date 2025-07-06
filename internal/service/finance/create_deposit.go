@@ -14,15 +14,6 @@ import (
 
 type DepositCreationStep int
 
-const (
-	StepName DepositCreationStep = iota
-	StepAmount
-	StepCurrency
-	StepInterestRate
-	StepExpirationDate
-	StepConfirmation
-)
-
 func (s *FinanceService) CreateDeposit(ctx context.Context, req *models.CreateDepositRequest) (*domain.Deposit, error) {
 	var result *domain.Deposit
 	var err error
@@ -101,8 +92,12 @@ func (s *FinanceService) isCurrencyAllowedForDeposits(currency domain.CurrencyNa
 		domain.RUB: true,
 		domain.USD: true,
 		domain.EUR: true,
-		domain.CNY: true,
 		domain.GBP: true,
+		domain.JPY: true,
+		domain.CNY: true,
+		domain.RSD: true,
+		domain.XBT: true,
+		domain.KZT: true,
 	}
 
 	return allowedCurrencies[currency]
@@ -110,7 +105,7 @@ func (s *FinanceService) isCurrencyAllowedForDeposits(currency domain.CurrencyNa
 
 func (s *FinanceService) getSupportedCurrenciesString() string {
 	allowedCurrencies := []domain.CurrencyName{
-		domain.RUB, domain.USD, domain.EUR, domain.CNY, domain.GBP,
+		domain.RUB, domain.USD, domain.EUR, domain.GBP, domain.JPY, domain.CNY, domain.RSD, domain.XBT, domain.KZT,
 	}
 
 	var currencies []string

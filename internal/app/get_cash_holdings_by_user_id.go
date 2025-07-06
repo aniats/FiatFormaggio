@@ -31,6 +31,7 @@ func (b *Bot) processCashHoldingsCommand(ctx context.Context, chatID int64, user
 
 	if len(holdings) == 0 {
 		b.sendMessage(chatID, "📭 У вас пока нет сохраненных наличных счетов.\n\nСоздайте первый счет: /create_cash_holding")
+		b.sendMainMenu(chatID)
 		return nil, nil
 	}
 
@@ -46,5 +47,6 @@ func (b *Bot) processCashHoldingsCommand(ctx context.Context, chatID int64, user
 	text += fmt.Sprintf("📊 Всего счетов: %s", FormatInteger(int64(len(holdings))))
 
 	b.sendMessage(chatID, text)
+	b.sendMainMenu(chatID)
 	return nil, nil
 }

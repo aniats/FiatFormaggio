@@ -34,6 +34,7 @@ func (b *Bot) processCurrencyRatesCommand(ctx context.Context, chatID int64) err
 	if len(rates) == 0 {
 		noRatesErr := errors.ErrCurrencyRatesUnavailable
 		b.sendMessage(chatID, errors.GetUserMessage(noRatesErr))
+		b.sendMainMenu(chatID)
 		return noRatesErr
 	}
 
@@ -70,5 +71,6 @@ func (b *Bot) processCurrencyRatesCommand(ctx context.Context, chatID int64) err
 	text += fmt.Sprintf("\n📊 Всего валют: %s", FormatInteger(int64(len(rates))))
 
 	b.sendMessage(chatID, text)
+	b.sendMainMenu(chatID)
 	return nil
 }

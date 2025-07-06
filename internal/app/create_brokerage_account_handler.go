@@ -86,7 +86,7 @@ func (h *BrokerageAccountCreationHandler) handleName(bot *Bot, session *UserSess
 	text := fmt.Sprintf(`✅ Название: "%s"
 
 	Шаг 2/6: Введите текущую сумму на счете
-	Например: 50000, 1500.50, 0
+	Например: 50,000; 1,500.50; 0
 	
 	Валюта будет указана на следующем шаге.`, name)
 
@@ -118,24 +118,40 @@ func (h *BrokerageAccountCreationHandler) handleAmount(bot *Bot, session *UserSe
 
 	text := fmt.Sprintf(`✅ Сумма: %s
 
-	Шаг 3/6: Выберите валюту счета
-	Доступные варианты:
-	• RUB, рубль - Российский рубль ₽
-	• USD, доллар - Американский доллар $
-	• EUR, евро - Евро €
-	• CNY, юань - Китайский юань ¥
-	• GBP, фунт - Британский фунт £
-	
-	По умолчанию: RUB (введите "пропустить" для RUB)`, FormatNumber(amount))
+Шаг 3/6: Выберите валюту счета
 
-	bot.sendMessage(session.ChatID, text)
+💰 Выберите валюту из списка ниже или введите код валюты:`, FormatNumber(amount))
+
+	keyboard := CreateCurrencySelectionKeyboard()
+	bot.sendMessageWithKeyboard(session.ChatID, text, keyboard)
 	return nil
 }
 
 func (h *BrokerageAccountCreationHandler) handleCurrency(bot *Bot, session *UserSession, input string) error {
 	currencyStr := strings.TrimSpace(input)
+	if strings.HasPrefix(input, CallbackCurrencyPrefix) {
+		currencyCode := strings.TrimPrefix(input, CallbackCurrencyPrefix)
 
-	if IsSkipResponse(currencyStr) || currencyStr == "" {
+		if currencyCode == "skip" {
+			session.SetData("currency", domain.RUB)
+			session.CurrentStep = StepAccount
+			h.sendBrokerPrompt(bot, session)
+			return nil
+		}
+
+		currency := domain.CurrencyName(currencyCode)
+		if !currency.IsValid() {
+			bot.sendMessage(session.ChatID, "❌ Неизвестная валюта. Используйте кнопки выше для выбора:")
+			return nil
+		}
+
+		session.SetData("currency", currency)
+		session.CurrentStep = StepAccount
+		h.sendBrokerPrompt(bot, session)
+		return nil
+	}
+
+	if IsSkipResponse(currencyStr) {
 		session.SetData("currency", domain.RUB)
 		session.CurrentStep = StepAccount
 		h.sendBrokerPrompt(bot, session)
@@ -146,14 +162,18 @@ func (h *BrokerageAccountCreationHandler) handleCurrency(bot *Bot, session *User
 	if err != nil {
 		text := fmt.Sprintf(`❌ Неизвестная валюта "%s"
 
-		Доступные варианты:
-		• RUB, рубль, российский рубль
-		• USD, доллар, американский доллар  
-		• EUR, евро
-		• CNY, юань, китайский юань
-		• GBP, фунт, британский фунт
-		
-		Попробуйте еще раз:`, currencyStr)
+Доступные варианты:
+• RUB - Российский рубль ₽
+• USD - Доллар США $
+• EUR - Евро €
+• GBP - Британский фунт £
+• JPY - Японская иена ¥
+• CNY - Китайский юань ¥
+• RSD - Сербский динар
+• XBT - Биткоин ₿
+• KZT - Казахстанский тенге
+
+Используйте кнопки выше или введите код валюты:`, currencyStr)
 		bot.sendMessage(session.ChatID, text)
 		return nil
 	}
@@ -282,13 +302,13 @@ func (h *BrokerageAccountCreationHandler) sendConfirmation(bot *Bot, session *Us
 
 	text := fmt.Sprintf(`📈 Подтверждение создания брокерского счета
 
-	📝 Название: %s
-	💰 Сумма: %s
-	💱 Валюта: %s (%s)
-	🏦 Брокер: %s
-	📊 Тип счета: %s
+📝 Название: %s
+💰 Сумма: %s
+💱 Валюта: %s (%s)
+🏦 Брокер: %s
+📊 Тип счета: %s
 
-	Все верно? Отправьте "да" для создания счета или "нет" для отмены.`,
+🔍 Подтвердите создание брокерского счета:`,
 		name,
 		currency.FormatAmountRussian(amount),
 		currency.ToHumanRussian(),
@@ -296,7 +316,8 @@ func (h *BrokerageAccountCreationHandler) sendConfirmation(bot *Bot, session *Us
 		brokerText,
 		accountTypeText)
 
-	bot.sendMessage(session.ChatID, text)
+	keyboard := CreateConfirmationKeyboard(CallbackConfirmBrokerageYes, CallbackConfirmBrokerageNo)
+	bot.sendMessageWithKeyboard(session.ChatID, text, keyboard)
 }
 
 func (h *BrokerageAccountCreationHandler) formatAccountType(accountType domain.BrokerageType) string {
@@ -317,6 +338,17 @@ func (h *BrokerageAccountCreationHandler) formatAccountType(accountType domain.B
 }
 
 func (h *BrokerageAccountCreationHandler) handleConfirmation(ctx context.Context, bot *Bot, session *UserSession, input string) error {
+	if input == CallbackConfirmBrokerageYes {
+		bot.sessionManager.ClearSession(session.UserID)
+		return h.CompleteSession(ctx, bot, session)
+	}
+
+	if input == CallbackConfirmBrokerageNo {
+		bot.sessionManager.ClearSession(session.UserID)
+		bot.sendMessage(session.ChatID, "❌ Создание брокерского счета отменено.")
+		return nil
+	}
+
 	if IsNegativeResponse(input) {
 		bot.sessionManager.ClearSession(session.UserID)
 		bot.sendMessage(session.ChatID, "❌ Создание брокерского счета отменено.")
@@ -325,7 +357,7 @@ func (h *BrokerageAccountCreationHandler) handleConfirmation(ctx context.Context
 
 	if !IsPositiveResponse(input) {
 		if IsValidResponse(input) {
-			bot.sendMessage(session.ChatID, "Пожалуйста, ответьте 'да' для подтверждения или 'нет' для отмены:")
+			bot.sendMessage(session.ChatID, "❓ Используйте кнопки выше или введите 'да' для создания или 'нет' для отмены:")
 		} else {
 			bot.sendMessage(session.ChatID, GetSuggestionMessage())
 		}
@@ -395,6 +427,7 @@ func (h *BrokerageAccountCreationHandler) executeCompletion(ctx context.Context,
 		FormatInteger(int64(account.Id)))
 
 	bot.sendMessage(session.ChatID, text)
+	bot.sendMainMenu(session.ChatID)
 	return nil
 }
 

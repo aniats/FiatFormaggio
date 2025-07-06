@@ -25,11 +25,44 @@ const (
 	WorkerChannelBufferSize = 100
 )
 
+const (
+	CallbackConfirmDepositYes   = "confirm_deposit_yes"
+	CallbackConfirmDepositNo    = "confirm_deposit_no"
+	CallbackConfirmBrokerageYes = "confirm_brokerage_yes"
+	CallbackConfirmBrokerageNo  = "confirm_brokerage_no"
+	CallbackConfirmSavingYes    = "confirm_saving_yes"
+	CallbackConfirmSavingNo     = "confirm_saving_no"
+	CallbackConfirmCashYes      = "confirm_cash_yes"
+	CallbackConfirmCashNo       = "confirm_cash_no"
+
+	CallbackCurrencyPrefix = "currency_"
+	CallbackCurrencyRUB    = "currency_RUB"
+	CallbackCurrencyUSD    = "currency_USD"
+	CallbackCurrencyEUR    = "currency_EUR"
+	CallbackCurrencyGBP    = "currency_GBP"
+	CallbackCurrencyJPY    = "currency_JPY"
+	CallbackCurrencyCNY    = "currency_CNY"
+	CallbackCurrencyRSD    = "currency_RSD"
+	CallbackCurrencyXBT    = "currency_XBT"
+	CallbackCurrencyKZT    = "currency_KZT"
+	CallbackCurrencySkip   = "currency_skip"
+
+	CallbackMenuTotal           = "menu_total"
+	CallbackMenuDeposits        = "menu_deposits"
+	CallbackMenuCreateDeposit   = "menu_create_deposit"
+	CallbackMenuBrokerage       = "menu_brokerage"
+	CallbackMenuCreateBrokerage = "menu_create_brokerage"
+	CallbackMenuSaving          = "menu_saving"
+	CallbackMenuCreateSaving    = "menu_create_saving"
+	CallbackMenuCash            = "menu_cash"
+	CallbackMenuCreateCash      = "menu_create_cash"
+	CallbackMenuRates           = "menu_rates"
+)
+
 type CommandType string
 
 const (
 	CommandStart                    CommandType = "start"
-	CommandHelp                     CommandType = "help"
 	CommandTotal                    CommandType = "total"
 	CommandTotalRu                  CommandType = "общий_баланс"
 	CommandDeposits                 CommandType = "deposits"
@@ -60,6 +93,7 @@ const (
 type BotAPI interface {
 	GetLastEvents() <-chan tgBotAPI.Update
 	SendMessage(chatID int64, text string) error
+	SendMessageWithKeyboard(chatID int64, text string, keyboard tgBotAPI.InlineKeyboardMarkup) error
 	SetMyCommands(commands []tgBotAPI.BotCommand) error
 	Close()
 }
@@ -126,7 +160,7 @@ type Job struct {
 }
 
 func NewBot(botAPI BotAPI, financeService FinanceService, currencyService CurrencyService, appName string) *Bot {
-	interceptor := middleware.NewInterceptor(middleware.DefaultConfig(appName + "-bot"), appName)
+	interceptor := middleware.NewInterceptor(middleware.DefaultConfig(appName+"-bot"), appName)
 	errorHandler := errors.DefaultErrorHandler()
 
 	return &Bot{
@@ -170,38 +204,38 @@ func (b *Bot) Start(ctx context.Context) error {
 			log.Println("Bot stopping...")
 			return ctx.Err()
 		case update := <-updates:
-			if update.Message == nil {
-				continue
-			}
+			if update.Message != nil {
+				msg := &Message{
+					ChatID:   update.Message.Chat.ID,
+					UserID:   update.Message.From.ID,
+					Username: update.Message.From.UserName,
+					Text:     update.Message.Text,
+				}
 
-			msg := &Message{
-				ChatID:   update.Message.Chat.ID,
-				UserID:   update.Message.From.ID,
-				Username: update.Message.From.UserName,
-				Text:     update.Message.Text,
-			}
+				tracer := otel.Tracer(b.appName)
+				msgCtx, span := tracer.Start(ctx, "Bot.ProcessTelegramMessage")
+				span.SetAttributes(
+					attribute.Int64("user.id", msg.UserID),
+					attribute.Int64("chat.id", msg.ChatID),
+					attribute.String("message.text", msg.Text),
+				)
 
-			tracer := otel.Tracer(b.appName)
-			msgCtx, span := tracer.Start(ctx, "Bot.ProcessTelegramMessage")
-			span.SetAttributes(
-				attribute.Int64("user.id", msg.UserID),
-				attribute.Int64("chat.id", msg.ChatID),
-				attribute.String("message.text", msg.Text),
-			)
+				job := Job{
+					ctx:     msgCtx,
+					message: msg,
+					bot:     b,
+					span:    span,
+				}
 
-			job := Job{
-				ctx:     msgCtx,
-				message: msg,
-				bot:     b,
-				span:    span,
-			}
-
-			select {
-			case b.workerPool.jobChannel <- job:
-			case <-ctx.Done():
-				return ctx.Err()
-			default:
-				log.Printf("Worker pool is full, dropping message from chat %s", FormatInteger(update.Message.Chat.ID))
+				select {
+				case b.workerPool.jobChannel <- job:
+				case <-ctx.Done():
+					return ctx.Err()
+				default:
+					log.Printf("Worker pool is full, dropping message from chat %s", FormatInteger(update.Message.Chat.ID))
+				}
+			} else if update.CallbackQuery != nil {
+				b.handleCallbackQuery(ctx, update.CallbackQuery)
 			}
 		}
 	}
@@ -218,10 +252,163 @@ func (b *Bot) sendMessage(chatID int64, text string) {
 	}
 }
 
+func (b *Bot) sendMessageWithKeyboard(chatID int64, text string, keyboard tgBotAPI.InlineKeyboardMarkup) {
+	if err := b.botAPI.SendMessageWithKeyboard(chatID, text, keyboard); err != nil {
+		log.Printf("Error sending message with keyboard to chat %s: %v", FormatInteger(chatID), err)
+	}
+}
+
+func (b *Bot) sendMainMenu(chatID int64) {
+	text := `🏠 Главное меню
+
+Выберите действие:
+• 💰 Общий баланс - посмотреть сводку по всем счетам
+• 💳 Депозиты - управление депозитами  
+• 📈 Брокерские счета - управление инвестициями
+• 🏦 Накопительные - управление накоплениями
+• 💵 Наличные - учет наличных средств
+• 💱 Курсы валют - актуальные курсы
+`
+
+	keyboard := CreateMainMenuKeyboard()
+	b.sendMessageWithKeyboard(chatID, text, keyboard)
+}
+
+func (b *Bot) handleMenuCallback(ctx context.Context, message *Message) bool {
+	input := message.Text
+	chatID := message.ChatID
+	userID := domain.UserId(message.UserID)
+
+	switch input {
+	case CallbackMenuTotal:
+		b.sendTotalBalanceCommand(ctx, chatID, userID)
+		return true
+	case CallbackMenuDeposits:
+		b.sendDepositsCommand(ctx, chatID, userID)
+		return true
+	case CallbackMenuCreateDeposit:
+		b.startSession(ctx, message, SessionCreateDeposit)
+		return true
+	case CallbackMenuBrokerage:
+		b.sendBrokerageAccountsCommand(ctx, chatID, userID)
+		return true
+	case CallbackMenuCreateBrokerage:
+		b.startSession(ctx, message, SessionCreateBrokerageAccountSession)
+		return true
+	case CallbackMenuSaving:
+		b.sendSavingAccountsCommand(ctx, chatID, userID)
+		return true
+	case CallbackMenuCreateSaving:
+		b.startSession(ctx, message, SessionCreateSavingAccount)
+		return true
+	case CallbackMenuCash:
+		b.sendCashHoldingsCommand(ctx, chatID, userID)
+		return true
+	case CallbackMenuCreateCash:
+		b.startSession(ctx, message, SessionCreateCashHolding)
+		return true
+	case CallbackMenuRates:
+		b.sendCurrencyRatesCommand(ctx, chatID)
+		return true
+	}
+	return false
+}
+
+func CreateConfirmationKeyboard(confirmAction, cancelAction string) tgBotAPI.InlineKeyboardMarkup {
+	return tgBotAPI.NewInlineKeyboardMarkup(
+		tgBotAPI.NewInlineKeyboardRow(
+			tgBotAPI.NewInlineKeyboardButtonData("✅ Да", confirmAction),
+			tgBotAPI.NewInlineKeyboardButtonData("❌ Нет", cancelAction),
+		),
+	)
+}
+
+func CreateMainMenuKeyboard() tgBotAPI.InlineKeyboardMarkup {
+	return tgBotAPI.NewInlineKeyboardMarkup(
+		tgBotAPI.NewInlineKeyboardRow(
+			tgBotAPI.NewInlineKeyboardButtonData("💰 Общий баланс", CallbackMenuTotal),
+			tgBotAPI.NewInlineKeyboardButtonData("💱 Курсы валют", CallbackMenuRates),
+		),
+		tgBotAPI.NewInlineKeyboardRow(
+			tgBotAPI.NewInlineKeyboardButtonData("💳 Депозиты", CallbackMenuDeposits),
+			tgBotAPI.NewInlineKeyboardButtonData("➕ Создать депозит", CallbackMenuCreateDeposit),
+		),
+		tgBotAPI.NewInlineKeyboardRow(
+			tgBotAPI.NewInlineKeyboardButtonData("📈 Брокерские счета", CallbackMenuBrokerage),
+			tgBotAPI.NewInlineKeyboardButtonData("➕ Создать брокерский", CallbackMenuCreateBrokerage),
+		),
+		tgBotAPI.NewInlineKeyboardRow(
+			tgBotAPI.NewInlineKeyboardButtonData("🏦 Накопительные", CallbackMenuSaving),
+			tgBotAPI.NewInlineKeyboardButtonData("➕ Создать накопительный", CallbackMenuCreateSaving),
+		),
+		tgBotAPI.NewInlineKeyboardRow(
+			tgBotAPI.NewInlineKeyboardButtonData("💵 Наличные", CallbackMenuCash),
+			tgBotAPI.NewInlineKeyboardButtonData("➕ Создать наличные", CallbackMenuCreateCash),
+		),
+	)
+}
+
+func CreateCurrencySelectionKeyboard() tgBotAPI.InlineKeyboardMarkup {
+	return tgBotAPI.NewInlineKeyboardMarkup(
+		tgBotAPI.NewInlineKeyboardRow(
+			tgBotAPI.NewInlineKeyboardButtonData("RUB - Рубль", CallbackCurrencyRUB),
+			tgBotAPI.NewInlineKeyboardButtonData("USD - Доллар", CallbackCurrencyUSD),
+			tgBotAPI.NewInlineKeyboardButtonData("EUR - Евро", CallbackCurrencyEUR),
+		),
+		tgBotAPI.NewInlineKeyboardRow(
+			tgBotAPI.NewInlineKeyboardButtonData("GBP - Фунт", CallbackCurrencyGBP),
+			tgBotAPI.NewInlineKeyboardButtonData("JPY - Иена", CallbackCurrencyJPY),
+			tgBotAPI.NewInlineKeyboardButtonData("CNY - Юань", CallbackCurrencyCNY),
+		),
+		tgBotAPI.NewInlineKeyboardRow(
+			tgBotAPI.NewInlineKeyboardButtonData("RSD - Динар", CallbackCurrencyRSD),
+			tgBotAPI.NewInlineKeyboardButtonData("XBT - Биткоин", CallbackCurrencyXBT),
+			tgBotAPI.NewInlineKeyboardButtonData("KZT - Тенге", CallbackCurrencyKZT),
+		),
+		tgBotAPI.NewInlineKeyboardRow(
+			tgBotAPI.NewInlineKeyboardButtonData("Пропустить (RUB)", CallbackCurrencySkip),
+		),
+	)
+}
+
 func (b *Bot) sendErrorMessage(ctx context.Context, chatID int64, err error, operation string) {
 	userMsg := b.errorHandler.Handle(ctx, err, operation)
 	if userMsg != "" {
 		b.sendMessage(chatID, userMsg)
+	}
+}
+
+func (b *Bot) handleCallbackQuery(ctx context.Context, callbackQuery *tgBotAPI.CallbackQuery) {
+	userID := domain.UserId(callbackQuery.From.ID)
+	chatID := callbackQuery.Message.Chat.ID
+	data := callbackQuery.Data
+
+	msg := &Message{
+		ChatID:   chatID,
+		UserID:   int64(userID),
+		Username: callbackQuery.From.UserName,
+		Text:     data,
+	}
+
+	tracer := otel.Tracer(b.appName)
+	msgCtx, span := tracer.Start(ctx, "Bot.ProcessCallbackQuery")
+	span.SetAttributes(
+		attribute.Int64("user.id", int64(userID)),
+		attribute.Int64("chat.id", chatID),
+		attribute.String("callback.data", data),
+	)
+
+	job := Job{
+		ctx:     msgCtx,
+		message: msg,
+		bot:     b,
+		span:    span,
+	}
+
+	select {
+	case b.workerPool.jobChannel <- job:
+	default:
+		log.Printf("Worker pool is full, dropping callback query from chat %s", FormatInteger(chatID))
 	}
 }
 
@@ -270,9 +457,13 @@ func (b *Bot) processMessage(ctx context.Context, message *Message) {
 		return
 	}
 
+	if b.handleMenuCallback(ctx, message) {
+		return
+	}
+
 	switch command {
-	case CommandStart, CommandHelp:
-		b.sendHelp(chatID)
+	case CommandStart:
+		b.sendMainMenu(chatID)
 	case CommandTotal, CommandTotalRu:
 		b.sendTotalBalanceCommand(ctx, chatID, domain.UserId(message.UserID))
 	case CommandDeposits, CommandDepositsRu1, CommandDepositsRu2:
@@ -294,7 +485,8 @@ func (b *Bot) processMessage(ctx context.Context, message *Message) {
 	case CommandRates, CommandRatesRu1, CommandRatesRu2:
 		b.sendCurrencyRatesCommand(ctx, chatID)
 	default:
-		b.sendMessage(chatID, "Неизвестная команда. Введите /help для списка команд.")
+		b.sendMessage(chatID, "Неизвестная команда. Используйте меню ниже или введите /help:")
+		b.sendMainMenu(chatID)
 	}
 }
 
@@ -411,10 +603,6 @@ func (b *Bot) setupBotCommands() error {
 		{
 			Command:     "start",
 			Description: "🏠 Начать работу с ботом",
-		},
-		{
-			Command:     "help",
-			Description: "❓ Показать справку по командам",
 		},
 		{
 			Command:     "total",

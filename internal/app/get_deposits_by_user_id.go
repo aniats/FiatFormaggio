@@ -36,6 +36,7 @@ func (b *Bot) processDepositsCommand(ctx context.Context, chatID int64, userID d
 
 	if len(deposits) == 0 {
 		b.sendMessage(chatID, "📭 У вас пока нет сохраненных депозитов.\n\nСоздайте первый депозит: /create_deposit")
+		b.sendMainMenu(chatID)
 		return nil, nil
 	}
 
@@ -57,5 +58,6 @@ func (b *Bot) processDepositsCommand(ctx context.Context, chatID int64, userID d
 	text += fmt.Sprintf("📊 Всего депозитов: %s", FormatInteger(int64(len(deposits))))
 
 	b.sendMessage(chatID, text)
+	b.sendMainMenu(chatID)
 	return nil, nil
 }
