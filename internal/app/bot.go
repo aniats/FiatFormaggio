@@ -183,7 +183,7 @@ func NewBotFromToken(token string, financeService FinanceService, currencyServic
 
 	bot := NewBot(botAPI, financeService, currencyService, appName)
 
-	if err := bot.setupBotCommands(); err != nil {
+	if err = bot.setupBotCommands(); err != nil {
 		log.Printf("Failed to set bot commands: %v", err)
 	}
 
@@ -515,7 +515,7 @@ func (b *Bot) createAndStartSession(ctx context.Context, userID domain.UserId, c
 
 	metrics.IncrementActiveSessions()
 
-	if err := session.Handler.HandleStep(ctx, b, session, msg); err != nil {
+	if err = session.Handler.HandleStep(ctx, b, session, msg); err != nil {
 		b.sendErrorMessage(ctx, chatID, err, "session_step")
 		b.sessionManager.ClearSession(userID)
 	}

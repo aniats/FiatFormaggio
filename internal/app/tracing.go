@@ -61,7 +61,7 @@ func InitTracing(appName string) (func(), error) {
 	log.Println("Tracing initialized successfully")
 
 	cleanup := func() {
-		if err := tp.Shutdown(context.Background()); err != nil {
+		if err = tp.Shutdown(context.Background()); err != nil {
 			log.Printf("Error shutting down tracer provider: %v", err)
 		}
 	}

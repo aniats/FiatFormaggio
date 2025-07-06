@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	CacheUpdateInterval = 24 * time.Hour
+	CacheUpdateInterval  = 24 * time.Hour
 	MinorUnitsMultiplier = 100
 )
 
@@ -65,8 +65,10 @@ func (s *CachedCurrencyService) Stop() {
 }
 
 func (s *CachedCurrencyService) GetCurrencyRates(ctx context.Context) ([]domain.CurrencyRate, error) {
-	var result []domain.CurrencyRate
-	var err error
+	var (
+		result []domain.CurrencyRate
+		err    error
+	)
 	
 	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
 		s.mu.RLock()
@@ -93,17 +95,17 @@ func (s *CachedCurrencyService) GetCurrencyRates(ctx context.Context) ([]domain.
 
 		return rates, nil
 	}
-	
+
 	wrappedHandler := s.interceptor.Chain(handler, "CachedCurrencyService.GetCurrencyRates")
 	resultInterface, err := wrappedHandler(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	if resultInterface != nil {
 		result = resultInterface.([]domain.CurrencyRate)
 	}
-	
+
 	return result, err
 }
 
@@ -170,7 +172,7 @@ func (s *CachedCurrencyService) updateCurrencyRates(ctx context.Context) error {
 			UpdatedAt:      now,
 		}
 
-		if err := s.repo.UpsertCurrencyRate(ctx, rate); err != nil {
+		if err = s.repo.UpsertCurrencyRate(ctx, rate); err != nil {
 			log.Printf("Failed to store currency rate for %s: %v", currency, err)
 			continue
 		}

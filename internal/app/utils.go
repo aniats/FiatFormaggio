@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"github.com/aniats/FiatFormaggio/internal/domain"
 	"strconv"
 	"strings"
 )
@@ -84,22 +83,5 @@ func FormatAmount(amount float64, currency string) string {
 		return fmt.Sprintf("€%s", formattedAmount)
 	default:
 		return fmt.Sprintf("%s %s", formattedAmount, currency)
-	}
-}
-
-func FormatAccountType(accountType domain.BrokerageType) string {
-	switch accountType {
-	case domain.Regular:
-		return "Обычный"
-	case domain.IIS:
-		return "ИИС"
-	case domain.IIS3:
-		return "ИИС-3"
-	case domain.IRA:
-		return "ИРА"
-	case domain.Margin:
-		return "Маржинальный"
-	default:
-		return string(accountType)
 	}
 }

@@ -46,7 +46,7 @@ func (b *Bot) processBrokerageAccountsCommand(ctx context.Context, chatID int64,
 			text += fmt.Sprintf("   🏦 %s\n", *account.Broker)
 		}
 
-		text += fmt.Sprintf("   📊 %s\n", FormatAccountType(account.AccountType))
+		text += fmt.Sprintf("   📊 %s\n", account.AccountType.ToDisplayName())
 		text += "\n"
 	}
 

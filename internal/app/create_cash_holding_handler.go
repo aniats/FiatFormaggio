@@ -93,7 +93,7 @@ func (h *CashHoldingCreationHandler) handleAmount(bot *Bot, session *UserSession
 		return nil
 	}
 
-	if err := h.validateAmount(amount); err != nil {
+	if err = h.validateAmount(amount); err != nil {
 		bot.sendMessage(session.ChatID, errors.GetUserMessage(err))
 		return nil
 	}
@@ -101,11 +101,12 @@ func (h *CashHoldingCreationHandler) handleAmount(bot *Bot, session *UserSession
 	session.SetData("amount", amount)
 	session.CurrentStep = StepCurrency
 
-	text := fmt.Sprintf(`✅ Сумма: %s
+	text := fmt.Sprintf(`
+	✅ Сумма: %s
 
-Шаг 3/4: Выберите валюту
-
-💰 Выберите валюту из списка ниже или введите код валюты:`, FormatNumber(amount))
+	Шаг 3/4: Выберите валюту
+	
+	💰 Выберите валюту из списка ниже или введите код валюты:`, FormatNumber(amount))
 
 	keyboard := CreateCurrencySelectionKeyboard()
 	bot.sendMessageWithKeyboard(session.ChatID, text, keyboard)
@@ -148,18 +149,18 @@ func (h *CashHoldingCreationHandler) handleCurrency(bot *Bot, session *UserSessi
 	if err != nil {
 		text := fmt.Sprintf(`❌ Неизвестная валюта "%s"
 
-Доступные варианты:
-• RUB - Российский рубль ₽
-• USD - Доллар США $
-• EUR - Евро €
-• GBP - Британский фунт £
-• JPY - Японская иена ¥
-• CNY - Китайский юань ¥
-• RSD - Сербский динар
-• XBT - Биткоин ₿
-• KZT - Казахстанский тенге
-
-Используйте кнопки выше или введите код валюты:`, currencyStr)
+	Доступные варианты:
+	• RUB - Российский рубль ₽
+	• USD - Доллар США $
+	• EUR - Евро €
+	• GBP - Британский фунт £
+	• JPY - Японская иена ¥
+	• CNY - Китайский юань ¥
+	• RSD - Сербский динар
+	• XBT - Биткоин ₿
+	• KZT - Казахстанский тенге
+	
+	Используйте кнопки выше или введите код валюты:`, currencyStr)
 		bot.sendMessage(session.ChatID, text)
 		return nil
 	}
@@ -262,11 +263,11 @@ func (h *CashHoldingCreationHandler) executeCompletion(ctx context.Context, bot 
 
 	text := fmt.Sprintf(`✅ Наличный счет успешно создан!
 
-📝 Название: %s
-💰 Сумма: %s
-🆔 ID: %s
-
-Используйте /cash_holdings чтобы посмотреть все ваши наличные счета.`,
+		📝 Название: %s
+		💰 Сумма: %s
+		🆔 ID: %s
+		
+		Используйте /cash_holdings чтобы посмотреть все ваши наличные счета.`,
 		cashHolding.Name,
 		currency.FormatAmountRussian(amount),
 		FormatInteger(int64(cashHolding.Id)))

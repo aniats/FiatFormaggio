@@ -29,7 +29,7 @@ func (s *FinanceService) CreateCashHolding(ctx context.Context, req *models.Crea
 			Currency:         currency,
 		}
 
-		if err := s.repo.CreateCashHolding(ctx, cashHolding); err != nil {
+		if err = s.repo.CreateCashHolding(ctx, cashHolding); err != nil {
 			return nil, errors.WrapRepositoryError(err)
 		}
 

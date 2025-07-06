@@ -98,7 +98,7 @@ func (h *DepositCreationHandler) handleAmount(bot *Bot, session *UserSession, in
 		return nil
 	}
 
-	if err := h.validateAmount(amount); err != nil {
+	if err = h.validateAmount(amount); err != nil {
 		bot.sendMessage(session.ChatID, fmt.Sprintf("❌ %s Попробуйте еще раз:", err.Error()))
 		return nil
 	}
@@ -203,7 +203,7 @@ func (h *DepositCreationHandler) sendInterestRatePrompt(bot *Bot, session *UserS
 func (h *DepositCreationHandler) handleInterestRate(bot *Bot, session *UserSession, input string) error {
 	rateStr := strings.TrimSpace(input)
 
-	if IsSkipResponse(rateStr) || rateStr == "" {
+	if IsSkipResponse(rateStr) {
 		session.CurrentStep = StepDate
 		h.sendExpirationDatePrompt(bot, session)
 		return nil
@@ -215,7 +215,7 @@ func (h *DepositCreationHandler) handleInterestRate(bot *Bot, session *UserSessi
 		return nil
 	}
 
-	if err := h.validateInterestRate(rate); err != nil {
+	if err = h.validateInterestRate(rate); err != nil {
 		bot.sendMessage(session.ChatID, fmt.Sprintf("❌ %s Попробуйте еще раз:", err.Error()))
 		return nil
 	}

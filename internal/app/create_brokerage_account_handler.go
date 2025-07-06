@@ -298,7 +298,7 @@ func (h *BrokerageAccountCreationHandler) sendConfirmation(bot *Bot, session *Us
 		brokerText = *broker
 	}
 
-	accountTypeText := h.formatAccountType(accountType)
+	accountTypeText := accountType.ToDisplayName()
 
 	text := fmt.Sprintf(`📈 Подтверждение создания брокерского счета
 
@@ -320,22 +320,6 @@ func (h *BrokerageAccountCreationHandler) sendConfirmation(bot *Bot, session *Us
 	bot.sendMessageWithKeyboard(session.ChatID, text, keyboard)
 }
 
-func (h *BrokerageAccountCreationHandler) formatAccountType(accountType domain.BrokerageType) string {
-	switch accountType {
-	case domain.Regular:
-		return "Обычный"
-	case domain.IIS:
-		return "ИИС"
-	case domain.IIS3:
-		return "ИИС-3"
-	case domain.IRA:
-		return "ИРА"
-	case domain.Margin:
-		return "Маржинальный"
-	default:
-		return string(accountType)
-	}
-}
 
 func (h *BrokerageAccountCreationHandler) handleConfirmation(ctx context.Context, bot *Bot, session *UserSession, input string) error {
 	if input == CallbackConfirmBrokerageYes {
@@ -423,7 +407,7 @@ func (h *BrokerageAccountCreationHandler) executeCompletion(ctx context.Context,
 		account.Name,
 		currency.FormatAmountRussian(amount),
 		brokerText,
-		h.formatAccountType(account.AccountType),
+		account.AccountType.ToDisplayName(),
 		FormatInteger(int64(account.Id)))
 
 	bot.sendMessage(session.ChatID, text)

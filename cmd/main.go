@@ -67,7 +67,7 @@ func run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if err := application.Start(ctx); err != nil {
+	if err = application.Start(ctx); err != nil {
 		return errors.WrapServiceError(err)
 	}
 
@@ -104,8 +104,8 @@ func (a *Application) Start(ctx context.Context) error {
 		return errors.WrapServiceError(err)
 	}
 
-	if err := a.testServices(ctx); err != nil {
-		log.Printf("Service test error: %v", err)
+	if err := a.healthCheck(ctx); err != nil {
+		log.Printf("Service health check error: %v", err)
 	}
 
 	metrics.Init()
@@ -178,7 +178,7 @@ func (a *Application) initRepository() error {
 	healthCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	if err := repo.HealthCheck(healthCtx); err != nil {
+	if err = repo.HealthCheck(healthCtx); err != nil {
 		return errors.WrapDatabaseError(err)
 	}
 
@@ -218,7 +218,7 @@ func (a *Application) initBot() error {
 	return nil
 }
 
-func (a *Application) testServices(ctx context.Context) error {
+func (a *Application) healthCheck(ctx context.Context) error {
 	tracer := otel.Tracer(a.config.AppName)
 	ctx, span := tracer.Start(ctx, "Application.testServices")
 	defer span.End()

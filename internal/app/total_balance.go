@@ -13,21 +13,20 @@ func (b *Bot) sendTotalBalanceCommand(ctx context.Context, chatID int64, userID 
 		params := input.(map[string]interface{})
 		chatID := params["chatID"].(int64)
 		userID := params["userID"].(domain.UserId)
-		
+
 		return b.processTotalBalanceCommand(ctx, chatID, userID)
 	}
-	
+
 	params := map[string]interface{}{
 		"chatID": chatID,
 		"userID": userID,
 	}
-	
+
 	wrappedHandler := b.interceptor.Chain(handler, "Bot.sendTotalBalanceCommand")
 	_, _ = wrappedHandler(ctx, params)
 }
 
 func (b *Bot) processTotalBalanceCommand(ctx context.Context, chatID int64, userID domain.UserId) (interface{}, error) {
-
 	rates, err := b.currencyService.GetCurrencyRates(ctx)
 	if err != nil {
 		b.sendMessage(chatID, "❌ Ошибка получения курсов валют. Попробуйте позже.")
@@ -206,4 +205,3 @@ func formatAccountSummary(accountType string, count int64, currencyTotals map[do
 	message += fmt.Sprintf("  Всего: %s ₽\n\n", FormatNumber(totalRUB))
 	return message
 }
-
