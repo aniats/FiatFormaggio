@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"github.com/aniats/FiatFormaggio/internal/utils"
 	"strconv"
 	"strings"
 
@@ -17,7 +18,7 @@ func (h *BrokerageAccountCreationHandler) GetSessionType() SessionType {
 	return SessionCreateBrokerageAccountSession
 }
 
-func (h *BrokerageAccountCreationHandler) HandleStep(ctx context.Context, bot *Bot, session *UserSession, msg *Message) error {
+func (h *BrokerageAccountCreationHandler) HandleStep(ctx context.Context, bot *Bot, session *UserSession, msg *domain.Message) error {
 	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
 		return nil, h.processStep(ctx, bot, session, msg)
 	}
@@ -33,7 +34,7 @@ func (h *BrokerageAccountCreationHandler) HandleStep(ctx context.Context, bot *B
 	return err
 }
 
-func (h *BrokerageAccountCreationHandler) processStep(ctx context.Context, bot *Bot, session *UserSession, msg *Message) error {
+func (h *BrokerageAccountCreationHandler) processStep(ctx context.Context, bot *Bot, session *UserSession, msg *domain.Message) error {
 	switch session.CurrentStep {
 	case StepStart:
 		return h.handleStart(bot, session)
@@ -109,7 +110,7 @@ func (h *BrokerageAccountCreationHandler) handleAmount(bot *Bot, session *UserSe
 	}
 
 	if amount > 1000000000 {
-		bot.sendMessage(session.ChatID, fmt.Sprintf("❌ Слишком большая сумма (максимум %s). Попробуйте еще раз:", FormatInteger(1000000000)))
+		bot.sendMessage(session.ChatID, fmt.Sprintf("❌ Слишком большая сумма (максимум %s). Попробуйте еще раз:", utils.FormatInteger(1000000000)))
 		return nil
 	}
 
@@ -120,7 +121,7 @@ func (h *BrokerageAccountCreationHandler) handleAmount(bot *Bot, session *UserSe
 
 Шаг 3/6: Выберите валюту счета
 
-💰 Выберите валюту из списка ниже или введите код валюты:`, FormatNumber(amount))
+💰 Выберите валюту из списка ниже или введите код валюты:`, utils.FormatNumber(amount))
 
 	keyboard := CreateCurrencySelectionKeyboard()
 	bot.sendMessageWithKeyboard(session.ChatID, text, keyboard)
@@ -129,8 +130,8 @@ func (h *BrokerageAccountCreationHandler) handleAmount(bot *Bot, session *UserSe
 
 func (h *BrokerageAccountCreationHandler) handleCurrency(bot *Bot, session *UserSession, input string) error {
 	currencyStr := strings.TrimSpace(input)
-	if strings.HasPrefix(input, CallbackCurrencyPrefix) {
-		currencyCode := strings.TrimPrefix(input, CallbackCurrencyPrefix)
+	if strings.HasPrefix(input, domain.CallbackCurrencyPrefix) {
+		currencyCode := strings.TrimPrefix(input, domain.CallbackCurrencyPrefix)
 
 		if currencyCode == "skip" {
 			session.SetData("currency", domain.RUB)
@@ -151,7 +152,7 @@ func (h *BrokerageAccountCreationHandler) handleCurrency(bot *Bot, session *User
 		return nil
 	}
 
-	if IsSkipResponse(currencyStr) {
+	if utils.IsSkipResponse(currencyStr) {
 		session.SetData("currency", domain.RUB)
 		session.CurrentStep = StepAccount
 		h.sendBrokerPrompt(bot, session)
@@ -207,7 +208,7 @@ func (h *BrokerageAccountCreationHandler) handleBroker(bot *Bot, session *UserSe
 	brokerInput := strings.TrimSpace(input)
 
 	var broker *string
-	if IsSkipResponse(brokerInput) || brokerInput == "" {
+	if utils.IsSkipResponse(brokerInput) || brokerInput == "" {
 		broker = nil
 	} else {
 		if len(brokerInput) > 255 {
@@ -239,7 +240,7 @@ func (h *BrokerageAccountCreationHandler) handleAccountType(bot *Bot, session *U
 	accountTypeStr := strings.TrimSpace(input)
 
 	var accountType domain.BrokerageType
-	if IsSkipResponse(accountTypeStr) || accountTypeStr == "" {
+	if utils.IsSkipResponse(accountTypeStr) || accountTypeStr == "" {
 		accountType = domain.Regular
 	} else {
 		var err error
@@ -316,34 +317,33 @@ func (h *BrokerageAccountCreationHandler) sendConfirmation(bot *Bot, session *Us
 		brokerText,
 		accountTypeText)
 
-	keyboard := CreateConfirmationKeyboard(CallbackConfirmBrokerageYes, CallbackConfirmBrokerageNo)
+	keyboard := CreateConfirmationKeyboard(domain.CallbackConfirmBrokerageYes, domain.CallbackConfirmBrokerageNo)
 	bot.sendMessageWithKeyboard(session.ChatID, text, keyboard)
 }
 
-
 func (h *BrokerageAccountCreationHandler) handleConfirmation(ctx context.Context, bot *Bot, session *UserSession, input string) error {
-	if input == CallbackConfirmBrokerageYes {
+	if input == domain.CallbackConfirmBrokerageYes {
 		bot.sessionManager.ClearSession(session.UserID)
 		return h.CompleteSession(ctx, bot, session)
 	}
 
-	if input == CallbackConfirmBrokerageNo {
+	if input == domain.CallbackConfirmBrokerageNo {
 		bot.sessionManager.ClearSession(session.UserID)
 		bot.sendMessage(session.ChatID, "❌ Создание брокерского счета отменено.")
 		return nil
 	}
 
-	if IsNegativeResponse(input) {
+	if utils.IsNegativeResponse(input) {
 		bot.sessionManager.ClearSession(session.UserID)
 		bot.sendMessage(session.ChatID, "❌ Создание брокерского счета отменено.")
 		return nil
 	}
 
-	if !IsPositiveResponse(input) {
-		if IsValidResponse(input) {
+	if !utils.IsPositiveResponse(input) {
+		if utils.IsValidResponse(input) {
 			bot.sendMessage(session.ChatID, "❓ Используйте кнопки выше или введите 'да' для создания или 'нет' для отмены:")
 		} else {
-			bot.sendMessage(session.ChatID, GetSuggestionMessage())
+			bot.sendMessage(session.ChatID, utils.GetSuggestionMessage())
 		}
 		return nil
 	}
@@ -408,21 +408,13 @@ func (h *BrokerageAccountCreationHandler) executeCompletion(ctx context.Context,
 		currency.FormatAmountRussian(amount),
 		brokerText,
 		account.AccountType.ToDisplayName(),
-		FormatInteger(int64(account.Id)))
+		utils.FormatInteger(account.ID))
 
 	bot.sendMessage(session.ChatID, text)
 	bot.sendMainMenu(session.ChatID)
 	return nil
 }
 
-func (h *BrokerageAccountCreationHandler) GetNextStep(currentStep SessionStep, input string) (SessionStep, error) {
-	return StepComplete, nil
-}
-
-func (h *BrokerageAccountCreationHandler) ValidateInput(step SessionStep, input string) error {
-	return nil
-}
-
-func (h *BrokerageAccountCreationHandler) FormatConfirmation(session *UserSession) string {
+func (h *BrokerageAccountCreationHandler) FormatConfirmation(*UserSession) string {
 	return "Confirmation"
 }

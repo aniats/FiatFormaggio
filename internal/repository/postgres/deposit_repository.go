@@ -29,29 +29,29 @@ func (r *DepositRepository) CreateDeposit(ctx context.Context, deposit *domain.D
 				expiration_date, 
 				currency
 			) VALUES ($1, $2, $3, $4, $5, $6)
-			RETURNING id, expiration_date, created_at, updated_at
+			RETURNING ID, expiration_date, created_at, updated_at
 		`
 
-		var id int64
+		var ID int64
 		var expirationDate *time.Time
 		var createdAt, updatedAt time.Time
 
 		err := r.DB.QueryRowContext(
 			ctx,
 			query,
-			deposit.UserId,
+			deposit.UserID,
 			deposit.Name,
 			deposit.AmountMinorUnits,
 			deposit.InterestRateBasisPoints,
 			deposit.ExpirationDate,
 			deposit.Currency,
-		).Scan(&id, &expirationDate, &createdAt, &updatedAt)
+		).Scan(&ID, &expirationDate, &createdAt, &updatedAt)
 
 		if err != nil {
 			return nil, errors.WrapRepositoryError(err)
 		}
 
-		deposit.Id = id
+		deposit.ID = ID
 		deposit.ExpirationDate = expirationDate
 
 		return nil, nil
@@ -61,11 +61,11 @@ func (r *DepositRepository) CreateDeposit(ctx context.Context, deposit *domain.D
 	return err
 }
 
-func (r *DepositRepository) GetDepositsByUserID(ctx context.Context, userId domain.UserId) ([]domain.Deposit, error) {
+func (r *DepositRepository) GetDepositsByUserID(ctx context.Context, UserID domain.UserID) ([]domain.Deposit, error) {
 	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
 		query := `
 			SELECT
-				id,
+				ID,
 				user_id,
 				name, 
 				amount_minor_units, 
@@ -76,7 +76,7 @@ func (r *DepositRepository) GetDepositsByUserID(ctx context.Context, userId doma
 			WHERE user_id = $1
 			ORDER BY created_at DESC`
 
-		rows, queryErr := r.DB.QueryContext(ctx, query, userId)
+		rows, queryErr := r.DB.QueryContext(ctx, query, UserID)
 		if queryErr != nil {
 			return nil, errors.WrapRepositoryError(queryErr)
 		}
@@ -89,8 +89,8 @@ func (r *DepositRepository) GetDepositsByUserID(ctx context.Context, userId doma
 			var interestRateBasisPoints sql.NullInt64
 
 			scanErr := rows.Scan(
-				&deposit.Id,
-				&deposit.UserId,
+				&deposit.ID,
+				&deposit.UserID,
 				&deposit.Name,
 				&deposit.AmountMinorUnits,
 				&interestRateBasisPoints,

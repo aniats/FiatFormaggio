@@ -25,25 +25,25 @@ func (r *CashRepository) CreateCashHolding(ctx context.Context, cash *domain.Cas
 				amount_minor_units, 
 				currency
 			) VALUES ($1, $2, $3, $4)
-			RETURNING id
+			RETURNING ID
 		`
 
-		var id int64
+		var ID int64
 
 		err := r.DB.QueryRowContext(
 			ctx,
 			query,
-			cash.UserId,
+			cash.UserID,
 			cash.Name,
 			cash.AmountMinorUnits,
 			cash.Currency,
-		).Scan(&id)
+		).Scan(&ID)
 
 		if err != nil {
 			return nil, errors.WrapRepositoryError(err)
 		}
 
-		cash.Id = id
+		cash.ID = ID
 		return nil, nil
 	}
 
@@ -51,10 +51,10 @@ func (r *CashRepository) CreateCashHolding(ctx context.Context, cash *domain.Cas
 	return err
 }
 
-func (r *CashRepository) GetCashHoldingsByUserID(ctx context.Context, userId domain.UserId) ([]domain.CashHolding, error) {
+func (r *CashRepository) GetCashHoldingsByUserID(ctx context.Context, UserID domain.UserID) ([]domain.CashHolding, error) {
 	query := `
         SELECT 
-            id, 
+            ID, 
             user_id, 
             name, 
             amount_minor_units, 
@@ -63,7 +63,7 @@ func (r *CashRepository) GetCashHoldingsByUserID(ctx context.Context, userId dom
         WHERE user_id = $1
         ORDER BY created_at DESC`
 
-	rows, err := r.DB.QueryContext(ctx, query, userId)
+	rows, err := r.DB.QueryContext(ctx, query, UserID)
 	if err != nil {
 		return nil, errors.WrapRepositoryError(err)
 	}
@@ -74,8 +74,8 @@ func (r *CashRepository) GetCashHoldingsByUserID(ctx context.Context, userId dom
 		var cash domain.CashHolding
 
 		err := rows.Scan(
-			&cash.Id,
-			&cash.UserId,
+			&cash.ID,
+			&cash.UserID,
 			&cash.Name,
 			&cash.AmountMinorUnits,
 			&cash.Currency,

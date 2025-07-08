@@ -77,4 +77,3 @@ func (h *ErrorHandler) logBusinessError(ctx context.Context, appErr *AppError, o
 	log.Printf("[BUSINESS_ERROR] Code: %s, Operation: %s, User: %v",
 		appErr.Code, operation, appErr.Context["user_id"])
 }
-

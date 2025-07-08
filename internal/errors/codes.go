@@ -4,7 +4,7 @@ const (
 	CodeDatabaseError    = "DB_ERROR"
 	CodeExternalAPIError = "EXT_API_ERROR"
 	CodeInternalError    = "INTERNAL_ERROR"
-	CodeValidationError  = "VALIDATION_ERROR"
+	CodeValidationError  = "ValidATION_ERROR"
 	CodeRepositoryError  = "REPOSITORY_ERROR"
 	CodeServiceError     = "SERVICE_ERROR"
 	CodeConfigError      = "CONFIG_ERROR"
@@ -12,10 +12,10 @@ const (
 	CodeUnknownStep      = "UNKNOWN_STEP"
 	CodeParseError       = "PARSE_ERROR"
 
-	CodeInvalidAmount   = "INVALID_AMOUNT"
-	CodeInvalidCurrency = "INVALID_CURRENCY"
-	CodeInvalidName     = "INVALID_NAME"
-	CodeInvalidInput    = "INVALID_INPUT"
+	CodeInValidAmount   = "INValid_AMOUNT"
+	CodeInValidCurrency = "INValid_CURRENCY"
+	CodeInValidName     = "INValid_NAME"
+	CodeInValidInput    = "INValid_INPUT"
 	CodeAmountTooLarge  = "AMOUNT_TOO_LARGE"
 	CodeAmountTooSmall  = "AMOUNT_TOO_SMALL"
 	CodeNameTooLong     = "NAME_TOO_LONG"
@@ -27,13 +27,13 @@ const (
 )
 
 var (
-	ErrInvalidCurrency = NewBusinessError(
-		CodeInvalidCurrency,
+	ErrInValidCurrency = NewBusinessError(
+		CodeInValidCurrency,
 		"❌ Неподдерживаемая валюта. Доступные: RUB, USD, EUR, GBP, JPY, CNY, RSD, XBT, KZT.",
 	)
 
-	ErrInvalidInput = NewBusinessError(
-		CodeInvalidInput,
+	ErrInValidInput = NewBusinessError(
+		CodeInValidInput,
 		"❌ Неверный формат ввода. Попробуйте еще раз.",
 	)
 
@@ -53,7 +53,7 @@ var (
 	)
 
 	ErrAmountNotPositive = NewBusinessError(
-		CodeInvalidAmount,
+		CodeInValidAmount,
 		"❌ Сумма должна быть положительной.",
 	)
 
@@ -82,7 +82,7 @@ var (
 		"❌ Слишком далекая дата (максимум 10 лет).",
 	)
 
-	ErrInvalidDateFormat = NewBusinessError(
+	ErrInValidDateFormat = NewBusinessError(
 		CodeParseError,
 		"❌ Неверный формат даты.",
 	)
@@ -103,12 +103,12 @@ var (
 	)
 
 	ErrRequestNil = NewBusinessError(
-		CodeInvalidInput,
+		CodeInValidInput,
 		"❌ Запрос не может быть пустым.",
 	)
 
-	ErrInvalidUserID = NewBusinessError(
-		CodeInvalidInput,
+	ErrInValidUserID = NewBusinessError(
+		CodeInValidInput,
 		"❌ ID пользователя должен быть положительным.",
 	)
 
@@ -118,23 +118,23 @@ var (
 	)
 
 	ErrAmountNegative = NewBusinessError(
-		CodeInvalidAmount,
+		CodeInValidAmount,
 		"❌ Сумма не может быть отрицательной.",
 	)
 
 	ErrCurrencyRequired = NewBusinessError(
-		CodeInvalidCurrency,
+		CodeInValidCurrency,
 		"❌ Валюта обязательна.",
 	)
 
 	ErrAccountTypeRequired = NewBusinessError(
-		CodeInvalidInput,
+		CodeInValidInput,
 		"❌ Тип счета обязателен.",
 	)
 )
 
 func NewCurrencyError(currency string) *AppError {
-	return ErrInvalidCurrency.WithContext("currency", currency)
+	return ErrInValidCurrency.WithContext("currency", currency)
 }
 
 func NewUnknownSessionHandlerError(sessionType string) *AppError {
@@ -143,14 +143,14 @@ func NewUnknownSessionHandlerError(sessionType string) *AppError {
 
 func NewUnsupportedCurrencyError(currency string) *AppError {
 	return NewBusinessError(
-		CodeInvalidCurrency,
+		CodeInValidCurrency,
 		"❌ Неподдерживаемая валюта '"+currency+"'. Поддерживаемые валюты: RUB, USD, EUR, CNY, GBP.",
 	).WithContext("currency", currency)
 }
 
 func NewCurrencyNotAllowedForDepositsError(currency string) *AppError {
 	return NewBusinessError(
-		CodeInvalidCurrency,
+		CodeInValidCurrency,
 		"❌ Валюта '"+currency+"' не поддерживается для депозитов.",
 	).WithContext("currency", currency)
 }

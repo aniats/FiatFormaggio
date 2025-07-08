@@ -3,8 +3,8 @@ package domain
 import "time"
 
 type SavingAccount struct {
-	Id                      int64
-	UserId                  UserId
+	ID                      int64
+	UserID                  UserID
 	Name                    string
 	AmountMinorUnits        int64
 	ExpirationDate          *time.Time

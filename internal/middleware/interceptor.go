@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/aniats/FiatFormaggio/internal/metrics"
+	"github.com/aniats/FiatFormaggio/internal/tracing"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -19,7 +20,7 @@ type TracerInterface interface {
 
 type Interceptor struct {
 	tracer      TracerInterface
-	middlewares []Middleware
+	middlewares []middleware
 	config      *InterceptorConfig
 }
 
@@ -31,9 +32,8 @@ type InterceptorConfig struct {
 	ProfileThreshold time.Duration
 }
 
-type Middleware func(next Handler) Handler
-
 type Handler func(ctx context.Context, input interface{}) (interface{}, error)
+type middleware func(next Handler) Handler
 
 func DefaultConfig(serviceName string) *InterceptorConfig {
 	return &InterceptorConfig{
@@ -56,13 +56,13 @@ func NewInterceptor(config *InterceptorConfig, appName string) *Interceptor {
 	}
 
 	if config.EnableTracing {
-		ui.middlewares = append(ui.middlewares, ui.tracingMiddleware)
+		ui.middlewares = append(ui.middlewares, ui.tracingmiddleware)
 	}
 	if config.EnableMetrics {
-		ui.middlewares = append(ui.middlewares, ui.metricsMiddleware)
+		ui.middlewares = append(ui.middlewares, ui.metricsmiddleware)
 	}
 	if config.EnableProfiling {
-		ui.middlewares = append(ui.middlewares, ui.profilingMiddleware)
+		ui.middlewares = append(ui.middlewares, ui.profilingmiddleware)
 	}
 
 	return ui
@@ -75,7 +75,7 @@ type ServiceWrapper struct {
 	methodCache map[string]reflect.Value
 }
 
-func (ui *Interceptor) tracingMiddleware(next Handler) Handler {
+func (ui *Interceptor) tracingmiddleware(next Handler) Handler {
 	return func(ctx context.Context, input interface{}) (interface{}, error) {
 		opName := ui.extractOperationName(ctx)
 
@@ -98,7 +98,7 @@ func (ui *Interceptor) tracingMiddleware(next Handler) Handler {
 	}
 }
 
-func (ui *Interceptor) metricsMiddleware(next Handler) Handler {
+func (ui *Interceptor) metricsmiddleware(next Handler) Handler {
 	return func(ctx context.Context, input interface{}) (interface{}, error) {
 		start := time.Now()
 
@@ -113,7 +113,7 @@ func (ui *Interceptor) metricsMiddleware(next Handler) Handler {
 	}
 }
 
-func (ui *Interceptor) profilingMiddleware(next Handler) Handler {
+func (ui *Interceptor) profilingmiddleware(next Handler) Handler {
 	return func(ctx context.Context, input interface{}) (interface{}, error) {
 		if !ui.config.EnableProfiling {
 			return next(ctx, input)
@@ -184,21 +184,21 @@ func (ui *Interceptor) extractAttributes(input interface{}) []attribute.KeyValue
 		value = value.Elem()
 	}
 
-	if userIDField := ui.findField(value, "UserID", "UserId", "ID"); userIDField.IsValid() {
-		if userID := userIDField.Int(); userID > 0 {
-			attrs = append(attrs, attribute.Int64("user.id", userID))
+	if UserIDField := ui.findField(value, "UserID"); UserIDField.IsValid() {
+		if UserID := UserIDField.Int(); UserID > 0 {
+			attrs = append(attrs, attribute.Int64(tracing.UserID, UserID))
 		}
 	}
 
-	if chatIDField := ui.findField(value, "ChatID", "ChatId"); chatIDField.IsValid() {
+	if chatIDField := ui.findField(value, "ChatID"); chatIDField.IsValid() {
 		if chatID := chatIDField.Int(); chatID > 0 {
-			attrs = append(attrs, attribute.Int64("chat.id", chatID))
+			attrs = append(attrs, attribute.Int64(tracing.ChatID, chatID))
 		}
 	}
 
-	if cmdField := ui.findField(value, "Command", "Cmd"); cmdField.IsValid() {
+	if cmdField := ui.findField(value, "Command"); cmdField.IsValid() {
 		if cmd := cmdField.String(); cmd != "" {
-			attrs = append(attrs, attribute.String("command", cmd))
+			attrs = append(attrs, attribute.String(tracing.Command, cmd))
 		}
 	}
 

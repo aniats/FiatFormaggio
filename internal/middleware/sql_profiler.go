@@ -86,7 +86,7 @@ func (sp *SQLProfiler) profileQuery(ctx context.Context, operation, query string
 		result, err = fn()
 	}
 
-	sp.recordMetrics(operation, query, time.Since(start), err)
+	sp.recordMetrics(operation, query, time.Since(start))
 	sp.finishSpan(span, err)
 
 	return result, err
@@ -117,7 +117,7 @@ func (sp *SQLProfiler) profileQueryRow(ctx context.Context, operation, query str
 		result = fn()
 	}
 
-	sp.recordMetrics(operation, query, time.Since(start), nil)
+	sp.recordMetrics(operation, query, time.Since(start))
 	sp.finishSpan(span, nil)
 
 	return result, nil
@@ -149,7 +149,7 @@ func (sp *SQLProfiler) profileExec(ctx context.Context, operation, query string,
 		result, err = fn()
 	}
 
-	sp.recordMetrics(operation, query, time.Since(start), err)
+	sp.recordMetrics(operation, query, time.Since(start))
 	sp.finishSpan(span, err)
 
 	return result, err
@@ -185,7 +185,7 @@ func (sp *SQLProfiler) finishSpan(span trace.Span, err error) {
 	}
 }
 
-func (sp *SQLProfiler) recordMetrics(operation, query string, duration time.Duration, err error) {
+func (sp *SQLProfiler) recordMetrics(operation, query string, duration time.Duration) {
 	labels := []string{operation}
 	if query != "" {
 		labels = append(labels, sp.getQueryType(query))

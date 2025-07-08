@@ -59,7 +59,7 @@ func (r *CurrencyRepository) GetCurrencyRates(ctx context.Context) ([]domain.Cur
 	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
 		query := `
 			SELECT 
-				id,
+				ID,
 				currency,
 				rate_minor_units,
 				base_currency,

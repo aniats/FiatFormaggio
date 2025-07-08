@@ -1,4 +1,4 @@
-package app
+package tracing
 
 import (
 	"context"
@@ -62,7 +62,7 @@ func InitTracing(appName string) (func(), error) {
 
 	cleanup := func() {
 		if err = tp.Shutdown(context.Background()); err != nil {
-			log.Printf("Error shutting down tracer provider: %v", err)
+			log.Printf("Error shutting down tracer provIDer: %v", err)
 		}
 	}
 

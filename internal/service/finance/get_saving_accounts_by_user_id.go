@@ -7,22 +7,22 @@ import (
 	"github.com/aniats/FiatFormaggio/internal/errors"
 )
 
-func (s *FinanceService) GetSavingAccountsByUserID(ctx context.Context, userID domain.UserId) ([]domain.SavingAccount, error) {
+func (s *FinanceService) GetSavingAccountsByUserID(ctx context.Context, UserID domain.UserID) ([]domain.SavingAccount, error) {
 	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
-		if userID <= 0 {
-			return nil, errors.ErrInvalidUserID.WithContext("userID", userID)
+		if UserID <= 0 {
+			return nil, errors.ErrInValidUserID.WithContext("UserID", UserID)
 		}
 
-		accounts, err := s.repo.GetSavingAccountsByUserID(ctx, userID)
+		accounts, err := s.repo.GetSavingAccountsByUserID(ctx, UserID)
 		if err != nil {
-			return nil, errors.WrapRepositoryError(err).WithContext("userID", userID)
+			return nil, errors.WrapRepositoryError(err).WithContext("UserID", UserID)
 		}
 
 		return accounts, nil
 	}
 
 	wrappedHandler := s.interceptor.Chain(handler, "FinanceService.GetSavingAccountsByUserID")
-	resultInterface, err := wrappedHandler(ctx, userID)
+	resultInterface, err := wrappedHandler(ctx, UserID)
 	if err != nil {
 		return nil, err
 	}

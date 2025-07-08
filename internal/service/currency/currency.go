@@ -2,11 +2,11 @@ package currency
 
 import (
 	"context"
+	"github.com/aniats/FiatFormaggio/internal/utils"
 	"log"
 	"sync"
 	"time"
 
-	"github.com/aniats/FiatFormaggio/internal/app"
 	"github.com/aniats/FiatFormaggio/internal/domain"
 	"github.com/aniats/FiatFormaggio/internal/errors"
 	"github.com/aniats/FiatFormaggio/internal/middleware"
@@ -69,7 +69,7 @@ func (s *CachedCurrencyService) GetCurrencyRates(ctx context.Context) ([]domain.
 		result []domain.CurrencyRate
 		err    error
 	)
-	
+
 	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
 		s.mu.RLock()
 		defer s.mu.RUnlock()
@@ -178,6 +178,6 @@ func (s *CachedCurrencyService) updateCurrencyRates(ctx context.Context) error {
 		}
 	}
 
-	log.Printf("Successfully updated %s currency rates", app.FormatInteger(int64(len(externalRates))))
+	log.Printf("Successfully updated %s currency rates", utils.FormatInteger(int64(len(externalRates))))
 	return nil
 }

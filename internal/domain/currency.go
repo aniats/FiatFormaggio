@@ -39,7 +39,7 @@ type CurrencyRateCBR struct {
 }
 
 type CurrencyRate struct {
-	ID             int64        `db:"id"`
+	ID             int64        `db:"ID"`
 	Currency       CurrencyName `db:"currency"`
 	RateMinorUnits int64        `db:"rate_minor_units"`
 	BaseCurrency   CurrencyName `db:"base_currency"`
@@ -186,11 +186,11 @@ func CurrencyFromHuman(human string) (CurrencyName, error) {
 
 func formatNumberWithCommas(num float64) string {
 	str := strconv.FormatFloat(num, 'f', 2, 64)
-	
+
 	parts := strings.Split(str, ".")
 	integerPart := parts[0]
 	decimalPart := parts[1]
-	
+
 	if len(integerPart) > 3 {
 		var result strings.Builder
 		for i, digit := range integerPart {
@@ -201,9 +201,9 @@ func formatNumberWithCommas(num float64) string {
 		}
 		integerPart = result.String()
 	}
-	
+
 	decimalPart = strings.TrimRight(decimalPart, "0")
-	
+
 	if decimalPart == "" {
 		return integerPart
 	}

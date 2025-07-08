@@ -12,7 +12,10 @@ import (
 	"github.com/aniats/FiatFormaggio/internal/errors"
 	"github.com/aniats/FiatFormaggio/internal/metrics"
 	"github.com/aniats/FiatFormaggio/internal/middleware"
+	"github.com/aniats/FiatFormaggio/internal/service/chatgpt"
 	"github.com/aniats/FiatFormaggio/internal/service/finance/models"
+	"github.com/aniats/FiatFormaggio/internal/tracing"
+	"github.com/aniats/FiatFormaggio/internal/utils"
 	tgBotAPI "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -25,71 +28,6 @@ const (
 	WorkerChannelBufferSize = 100
 )
 
-const (
-	CallbackConfirmDepositYes   = "confirm_deposit_yes"
-	CallbackConfirmDepositNo    = "confirm_deposit_no"
-	CallbackConfirmBrokerageYes = "confirm_brokerage_yes"
-	CallbackConfirmBrokerageNo  = "confirm_brokerage_no"
-	CallbackConfirmSavingYes    = "confirm_saving_yes"
-	CallbackConfirmSavingNo     = "confirm_saving_no"
-	CallbackConfirmCashYes      = "confirm_cash_yes"
-	CallbackConfirmCashNo       = "confirm_cash_no"
-
-	CallbackCurrencyPrefix = "currency_"
-	CallbackCurrencyRUB    = "currency_RUB"
-	CallbackCurrencyUSD    = "currency_USD"
-	CallbackCurrencyEUR    = "currency_EUR"
-	CallbackCurrencyGBP    = "currency_GBP"
-	CallbackCurrencyJPY    = "currency_JPY"
-	CallbackCurrencyCNY    = "currency_CNY"
-	CallbackCurrencyRSD    = "currency_RSD"
-	CallbackCurrencyXBT    = "currency_XBT"
-	CallbackCurrencyKZT    = "currency_KZT"
-	CallbackCurrencySkip   = "currency_skip"
-
-	CallbackMenuTotal           = "menu_total"
-	CallbackMenuDeposits        = "menu_deposits"
-	CallbackMenuCreateDeposit   = "menu_create_deposit"
-	CallbackMenuBrokerage       = "menu_brokerage"
-	CallbackMenuCreateBrokerage = "menu_create_brokerage"
-	CallbackMenuSaving          = "menu_saving"
-	CallbackMenuCreateSaving    = "menu_create_saving"
-	CallbackMenuCash            = "menu_cash"
-	CallbackMenuCreateCash      = "menu_create_cash"
-	CallbackMenuRates           = "menu_rates"
-)
-
-type CommandType string
-
-const (
-	CommandStart                    CommandType = "start"
-	CommandTotal                    CommandType = "total"
-	CommandTotalRu                  CommandType = "общий_баланс"
-	CommandDeposits                 CommandType = "deposits"
-	CommandDepositsRu1              CommandType = "депозиты"
-	CommandDepositsRu2              CommandType = "вклады"
-	CommandCreateDeposit            CommandType = "create_deposit"
-	CommandCreateDepositRu          CommandType = "добавить_депозит"
-	CommandBrokerageAccounts        CommandType = "brokerage_accounts"
-	CommandBrokerageAccountsRu1     CommandType = "брокерские_счета"
-	CommandBrokerageAccountsRu2     CommandType = "счета"
-	CommandCreateBrokerageAccount   CommandType = "create_brokerage_account"
-	CommandCreateBrokerageAccountRu CommandType = "создать_брокерский_счет"
-	CommandSavingAccounts           CommandType = "saving_accounts"
-	CommandSavingAccountsRu1        CommandType = "накопительные_счета"
-	CommandSavingAccountsRu2        CommandType = "накопления"
-	CommandCreateSavingAccount      CommandType = "create_saving_account"
-	CommandCreateSavingAccountRu    CommandType = "создать_накопительный_счет"
-	CommandCashHoldings             CommandType = "cash_holdings"
-	CommandCashHoldingsRu1          CommandType = "наличные"
-	CommandCashHoldingsRu2          CommandType = "наличные_счета"
-	CommandCreateCashHolding        CommandType = "create_cash_holding"
-	CommandCreateCashHoldingRu      CommandType = "создать_наличный_счет"
-	CommandRates                    CommandType = "rates"
-	CommandRatesRu1                 CommandType = "курсы"
-	CommandRatesRu2                 CommandType = "валюты"
-)
-
 type BotAPI interface {
 	GetLastEvents() <-chan tgBotAPI.Update
 	SendMessage(chatID int64, text string) error
@@ -99,15 +37,17 @@ type BotAPI interface {
 }
 
 type FinanceService interface {
-	GetDepositsByUserID(ctx context.Context, userID domain.UserId) ([]domain.Deposit, error)
+	GetDepositsByUserID(ctx context.Context, UserID domain.UserID) ([]domain.Deposit, error)
 	CreateDeposit(ctx context.Context, req *models.CreateDepositRequest) (*domain.Deposit, error)
-	GetBrokerageAccountsByUserID(ctx context.Context, userID domain.UserId) ([]domain.BrokerageAccount, error)
+	GetBrokerageAccountsByUserID(ctx context.Context, UserID domain.UserID) ([]domain.BrokerageAccount, error)
 	CreateBrokerageAccount(ctx context.Context, req *models.CreateBrokerageAccountRequest) (*domain.BrokerageAccount, error)
-	GetSavingAccountsByUserID(ctx context.Context, userID domain.UserId) ([]domain.SavingAccount, error)
+	GetSavingAccountsByUserID(ctx context.Context, UserID domain.UserID) ([]domain.SavingAccount, error)
 	CreateSavingAccount(ctx context.Context, req *models.CreateSavingAccountRequest) (*domain.SavingAccount, error)
-	GetCashHoldingsByUserID(ctx context.Context, userID domain.UserId) ([]domain.CashHolding, error)
+	GetCashHoldingsByUserID(ctx context.Context, UserID domain.UserID) ([]domain.CashHolding, error)
 	CreateCashHolding(ctx context.Context, req *models.CreateCashHoldingRequest) (*domain.CashHolding, error)
-	EnsureUserExists(ctx context.Context, userID domain.UserId, username string) (bool, error)
+	EnsureUserExists(ctx context.Context, UserID domain.UserID, username string) (bool, error)
+	GetTotalBalance(ctx context.Context, UserID domain.UserID) (float64, error)
+	GetFinancialAdvice(ctx context.Context, userID domain.UserID, userMessage string, previousMessages []chatgpt.ChatMessage) (string, error)
 }
 
 type CurrencyService interface {
@@ -131,30 +71,9 @@ type WorkerPool struct {
 	wg         sync.WaitGroup
 }
 
-type Message struct {
-	ChatID   int64
-	UserID   int64
-	Username string
-	Text     string
-}
-
-func (m *Message) Command() string {
-	if len(m.Text) == 0 || m.Text[0] != '/' {
-		return ""
-	}
-
-	parts := strings.Fields(m.Text)
-	if len(parts) == 0 {
-		return ""
-	}
-
-	command := parts[0][1:]
-	return command
-}
-
 type Job struct {
 	ctx     context.Context
-	message *Message
+	message *domain.Message
 	bot     *Bot
 	span    trace.Span
 }
@@ -168,7 +87,7 @@ func NewBot(botAPI BotAPI, financeService FinanceService, currencyService Curren
 		financeService:  financeService,
 		currencyService: currencyService,
 		workerPool:      NewWorkerPool(DefaultWorkerPoolSize),
-		sessionManager:  NewUserSessionManager(),
+		sessionManager:  NewUserSessionManager(financeService),
 		interceptor:     interceptor,
 		errorHandler:    errorHandler,
 		appName:         appName,
@@ -195,8 +114,7 @@ func (b *Bot) Start(ctx context.Context) error {
 	defer b.workerPool.Stop()
 
 	updates := b.botAPI.GetLastEvents()
-
-	log.Printf("Bot started with %s workers", FormatInteger(int64(b.workerPool.workers)))
+	log.Printf("Bot started with %s workers", utils.FormatInteger(b.workerPool.workers))
 
 	for {
 		select {
@@ -205,7 +123,7 @@ func (b *Bot) Start(ctx context.Context) error {
 			return ctx.Err()
 		case update := <-updates:
 			if update.Message != nil {
-				msg := &Message{
+				msg := &domain.Message{
 					ChatID:   update.Message.Chat.ID,
 					UserID:   update.Message.From.ID,
 					Username: update.Message.From.UserName,
@@ -215,9 +133,9 @@ func (b *Bot) Start(ctx context.Context) error {
 				tracer := otel.Tracer(b.appName)
 				msgCtx, span := tracer.Start(ctx, "Bot.ProcessTelegramMessage")
 				span.SetAttributes(
-					attribute.Int64("user.id", msg.UserID),
-					attribute.Int64("chat.id", msg.ChatID),
-					attribute.String("message.text", msg.Text),
+					attribute.Int64(tracing.UserID, msg.UserID),
+					attribute.Int64(tracing.ChatID, msg.ChatID),
+					attribute.String(tracing.MessageText, msg.Text),
 				)
 
 				job := Job{
@@ -232,7 +150,7 @@ func (b *Bot) Start(ctx context.Context) error {
 				case <-ctx.Done():
 					return ctx.Err()
 				default:
-					log.Printf("Worker pool is full, dropping message from chat %s", FormatInteger(update.Message.Chat.ID))
+					log.Printf("Worker pool is full, dropping message from chat %s", utils.FormatInteger(update.Message.Chat.ID))
 				}
 			} else if update.CallbackQuery != nil {
 				b.handleCallbackQuery(ctx, update.CallbackQuery)
@@ -248,67 +166,67 @@ func (b *Bot) Stop() {
 
 func (b *Bot) sendMessage(chatID int64, text string) {
 	if err := b.botAPI.SendMessage(chatID, text); err != nil {
-		log.Printf("Error sending message to chat %s: %v", FormatInteger(chatID), err)
+		log.Printf("Error sending message to chat %d: %v", chatID, err)
 	}
 }
 
 func (b *Bot) sendMessageWithKeyboard(chatID int64, text string, keyboard tgBotAPI.InlineKeyboardMarkup) {
 	if err := b.botAPI.SendMessageWithKeyboard(chatID, text, keyboard); err != nil {
-		log.Printf("Error sending message with keyboard to chat %s: %v", FormatInteger(chatID), err)
+		log.Printf("Error sending message with keyboard to chat %d: %v", chatID, err)
 	}
 }
 
 func (b *Bot) sendMainMenu(chatID int64) {
 	text := `🏠 Главное меню
 
-Выберите действие:
-• 💰 Общий баланс - посмотреть сводку по всем счетам
-• 💳 Депозиты - управление депозитами  
-• 📈 Брокерские счета - управление инвестициями
-• 🏦 Накопительные - управление накоплениями
-• 💵 Наличные - учет наличных средств
-• 💱 Курсы валют - актуальные курсы
-`
+	Используйте кнопки ниже для навигации:
+	• 💰 Просмотр балансов и счетов
+	• 💡 ИИ советы по финансам
+	• ➕ Создание новых счетов
+	• 💱 Актуальные курсы валют`
 
 	keyboard := CreateMainMenuKeyboard()
 	b.sendMessageWithKeyboard(chatID, text, keyboard)
 }
 
-func (b *Bot) handleMenuCallback(ctx context.Context, message *Message) bool {
+func (b *Bot) handleMenuCallback(ctx context.Context, message *domain.Message) bool {
 	input := message.Text
 	chatID := message.ChatID
-	userID := domain.UserId(message.UserID)
+	UserID := domain.UserID(message.UserID)
 
 	switch input {
-	case CallbackMenuTotal:
-		b.sendTotalBalanceCommand(ctx, chatID, userID)
+	case domain.CallbackMenuTotal:
+		b.sendTotalBalanceCommand(ctx, chatID, UserID)
 		return true
-	case CallbackMenuDeposits:
-		b.sendDepositsCommand(ctx, chatID, userID)
+	case domain.CallbackMenuDeposits:
+		b.sendDepositsCommand(ctx, chatID, UserID)
 		return true
-	case CallbackMenuCreateDeposit:
+	case domain.CallbackMenuCreateDeposit:
 		b.startSession(ctx, message, SessionCreateDeposit)
 		return true
-	case CallbackMenuBrokerage:
-		b.sendBrokerageAccountsCommand(ctx, chatID, userID)
+	case domain.CallbackMenuBrokerage:
+		b.sendBrokerageAccountsCommand(ctx, chatID, UserID)
 		return true
-	case CallbackMenuCreateBrokerage:
+	case domain.CallbackMenuCreateBrokerage:
 		b.startSession(ctx, message, SessionCreateBrokerageAccountSession)
 		return true
-	case CallbackMenuSaving:
-		b.sendSavingAccountsCommand(ctx, chatID, userID)
+	case domain.CallbackMenuSaving:
+		b.sendSavingAccountsCommand(ctx, chatID, UserID)
 		return true
-	case CallbackMenuCreateSaving:
+	case domain.CallbackMenuCreateSaving:
 		b.startSession(ctx, message, SessionCreateSavingAccount)
 		return true
-	case CallbackMenuCash:
-		b.sendCashHoldingsCommand(ctx, chatID, userID)
+	case domain.CallbackMenuCash:
+		b.sendCashHoldingsCommand(ctx, chatID, UserID)
 		return true
-	case CallbackMenuCreateCash:
+	case domain.CallbackMenuCreateCash:
 		b.startSession(ctx, message, SessionCreateCashHolding)
 		return true
-	case CallbackMenuRates:
+	case domain.CallbackMenuRates:
 		b.sendCurrencyRatesCommand(ctx, chatID)
+		return true
+	case domain.CallbackMenuFinancialAdvice:
+		b.sendFinancialAdviceCommand(ctx, message)
 		return true
 	}
 	return false
@@ -326,24 +244,27 @@ func CreateConfirmationKeyboard(confirmAction, cancelAction string) tgBotAPI.Inl
 func CreateMainMenuKeyboard() tgBotAPI.InlineKeyboardMarkup {
 	return tgBotAPI.NewInlineKeyboardMarkup(
 		tgBotAPI.NewInlineKeyboardRow(
-			tgBotAPI.NewInlineKeyboardButtonData("💰 Общий баланс", CallbackMenuTotal),
-			tgBotAPI.NewInlineKeyboardButtonData("💱 Курсы валют", CallbackMenuRates),
+			tgBotAPI.NewInlineKeyboardButtonData("💰 Общий баланс", domain.CallbackMenuTotal),
+			tgBotAPI.NewInlineKeyboardButtonData("💱 Курсы валют", domain.CallbackMenuRates),
 		),
 		tgBotAPI.NewInlineKeyboardRow(
-			tgBotAPI.NewInlineKeyboardButtonData("💳 Депозиты", CallbackMenuDeposits),
-			tgBotAPI.NewInlineKeyboardButtonData("➕ Создать депозит", CallbackMenuCreateDeposit),
+			tgBotAPI.NewInlineKeyboardButtonData("💡 Финансовые советы", domain.CallbackMenuFinancialAdvice),
 		),
 		tgBotAPI.NewInlineKeyboardRow(
-			tgBotAPI.NewInlineKeyboardButtonData("📈 Брокерские счета", CallbackMenuBrokerage),
-			tgBotAPI.NewInlineKeyboardButtonData("➕ Создать брокерский", CallbackMenuCreateBrokerage),
+			tgBotAPI.NewInlineKeyboardButtonData("💳 Депозиты", domain.CallbackMenuDeposits),
+			tgBotAPI.NewInlineKeyboardButtonData("➕ Создать депозит", domain.CallbackMenuCreateDeposit),
 		),
 		tgBotAPI.NewInlineKeyboardRow(
-			tgBotAPI.NewInlineKeyboardButtonData("🏦 Накопительные", CallbackMenuSaving),
-			tgBotAPI.NewInlineKeyboardButtonData("➕ Создать накопительный", CallbackMenuCreateSaving),
+			tgBotAPI.NewInlineKeyboardButtonData("📈 Брокерские счета", domain.CallbackMenuBrokerage),
+			tgBotAPI.NewInlineKeyboardButtonData("➕ Создать брокерский", domain.CallbackMenuCreateBrokerage),
 		),
 		tgBotAPI.NewInlineKeyboardRow(
-			tgBotAPI.NewInlineKeyboardButtonData("💵 Наличные", CallbackMenuCash),
-			tgBotAPI.NewInlineKeyboardButtonData("➕ Создать наличные", CallbackMenuCreateCash),
+			tgBotAPI.NewInlineKeyboardButtonData("🏦 Накопительные", domain.CallbackMenuSaving),
+			tgBotAPI.NewInlineKeyboardButtonData("➕ Создать накопительный", domain.CallbackMenuCreateSaving),
+		),
+		tgBotAPI.NewInlineKeyboardRow(
+			tgBotAPI.NewInlineKeyboardButtonData("💵 Наличные", domain.CallbackMenuCash),
+			tgBotAPI.NewInlineKeyboardButtonData("➕ Создать наличные", domain.CallbackMenuCreateCash),
 		),
 	)
 }
@@ -351,41 +272,39 @@ func CreateMainMenuKeyboard() tgBotAPI.InlineKeyboardMarkup {
 func CreateCurrencySelectionKeyboard() tgBotAPI.InlineKeyboardMarkup {
 	return tgBotAPI.NewInlineKeyboardMarkup(
 		tgBotAPI.NewInlineKeyboardRow(
-			tgBotAPI.NewInlineKeyboardButtonData("RUB - Рубль", CallbackCurrencyRUB),
-			tgBotAPI.NewInlineKeyboardButtonData("USD - Доллар", CallbackCurrencyUSD),
-			tgBotAPI.NewInlineKeyboardButtonData("EUR - Евро", CallbackCurrencyEUR),
+			tgBotAPI.NewInlineKeyboardButtonData("RUB - Рубль", domain.CallbackCurrencyRUB),
+			tgBotAPI.NewInlineKeyboardButtonData("USD - Доллар", domain.CallbackCurrencyUSD),
+			tgBotAPI.NewInlineKeyboardButtonData("EUR - Евро", domain.CallbackCurrencyEUR),
 		),
 		tgBotAPI.NewInlineKeyboardRow(
-			tgBotAPI.NewInlineKeyboardButtonData("GBP - Фунт", CallbackCurrencyGBP),
-			tgBotAPI.NewInlineKeyboardButtonData("JPY - Иена", CallbackCurrencyJPY),
-			tgBotAPI.NewInlineKeyboardButtonData("CNY - Юань", CallbackCurrencyCNY),
+			tgBotAPI.NewInlineKeyboardButtonData("GBP - Фунт", domain.CallbackCurrencyGBP),
+			tgBotAPI.NewInlineKeyboardButtonData("JPY - Иена", domain.CallbackCurrencyJPY),
+			tgBotAPI.NewInlineKeyboardButtonData("CNY - Юань", domain.CallbackCurrencyCNY),
 		),
 		tgBotAPI.NewInlineKeyboardRow(
-			tgBotAPI.NewInlineKeyboardButtonData("RSD - Динар", CallbackCurrencyRSD),
-			tgBotAPI.NewInlineKeyboardButtonData("XBT - Биткоин", CallbackCurrencyXBT),
-			tgBotAPI.NewInlineKeyboardButtonData("KZT - Тенге", CallbackCurrencyKZT),
+			tgBotAPI.NewInlineKeyboardButtonData("RSD - Динар", domain.CallbackCurrencyRSD),
+			tgBotAPI.NewInlineKeyboardButtonData("XBT - Биткоин", domain.CallbackCurrencyXBT),
+			tgBotAPI.NewInlineKeyboardButtonData("KZT - Тенге", domain.CallbackCurrencyKZT),
 		),
 		tgBotAPI.NewInlineKeyboardRow(
-			tgBotAPI.NewInlineKeyboardButtonData("Пропустить (RUB)", CallbackCurrencySkip),
+			tgBotAPI.NewInlineKeyboardButtonData("Пропустить (RUB)", domain.CallbackCurrencySkip),
 		),
 	)
 }
 
 func (b *Bot) sendErrorMessage(ctx context.Context, chatID int64, err error, operation string) {
 	userMsg := b.errorHandler.Handle(ctx, err, operation)
-	if userMsg != "" {
-		b.sendMessage(chatID, userMsg)
-	}
+	b.sendMessage(chatID, userMsg)
 }
 
 func (b *Bot) handleCallbackQuery(ctx context.Context, callbackQuery *tgBotAPI.CallbackQuery) {
-	userID := domain.UserId(callbackQuery.From.ID)
+	UserID := domain.UserID(callbackQuery.From.ID)
 	chatID := callbackQuery.Message.Chat.ID
 	data := callbackQuery.Data
 
-	msg := &Message{
+	msg := &domain.Message{
 		ChatID:   chatID,
-		UserID:   int64(userID),
+		UserID:   int64(UserID),
 		Username: callbackQuery.From.UserName,
 		Text:     data,
 	}
@@ -393,8 +312,8 @@ func (b *Bot) handleCallbackQuery(ctx context.Context, callbackQuery *tgBotAPI.C
 	tracer := otel.Tracer(b.appName)
 	msgCtx, span := tracer.Start(ctx, "Bot.ProcessCallbackQuery")
 	span.SetAttributes(
-		attribute.Int64("user.id", int64(userID)),
-		attribute.Int64("chat.id", chatID),
+		attribute.Int64(tracing.UserID, int64(UserID)),
+		attribute.Int64(tracing.ChatID, chatID),
 		attribute.String("callback.data", data),
 	)
 
@@ -408,13 +327,13 @@ func (b *Bot) handleCallbackQuery(ctx context.Context, callbackQuery *tgBotAPI.C
 	select {
 	case b.workerPool.jobChannel <- job:
 	default:
-		log.Printf("Worker pool is full, dropping callback query from chat %s", FormatInteger(chatID))
+		log.Printf("Worker pool is full, dropping callback query from chat %s", utils.FormatInteger(chatID))
 	}
 }
 
-func (b *Bot) handleMessage(ctx context.Context, message *Message) {
+func (b *Bot) handleMessage(ctx context.Context, message *domain.Message) {
 	handler := func(ctx context.Context, msg interface{}) error {
-		if message, ok := msg.(*Message); ok {
+		if message, ok := msg.(*domain.Message); ok {
 			b.processMessage(ctx, message)
 		}
 		return nil
@@ -430,29 +349,28 @@ func (b *Bot) handleMessage(ctx context.Context, message *Message) {
 	}
 }
 
-func (b *Bot) processMessage(ctx context.Context, message *Message) {
+func (b *Bot) processMessage(ctx context.Context, message *domain.Message) {
 
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	command := CommandType(strings.ToLower(message.Command()))
 	chatID := message.ChatID
-	userID := domain.UserId(message.UserID)
-
+	UserID := domain.UserID(message.UserID)
 	telegramUsername := message.Username
 
-	isNewUser, err := b.financeService.EnsureUserExists(ctx, userID, telegramUsername)
+	isNewUser, err := b.financeService.EnsureUserExists(ctx, UserID, telegramUsername)
 	if err != nil {
-		log.Printf("Failed to ensure user exists for userID %s: %v", FormatInteger(int64(userID)), err)
+		log.Printf("Failed to ensure user exists for UserID %s: %v", utils.FormatInteger(int64(UserID)), err)
 		b.sendMessage(chatID, "❌ Ошибка инициализации пользователя. Попробуйте позже.")
 		return
 	}
 
 	if isNewUser {
-		b.sendMessage(chatID, "🎉 Добро пожаловать! Вы зарегистрированы в системе. Введите /help для начала работы.")
+		b.sendMessage(chatID, "🎉 Добро пожаловать! Вы зарегистрированы в системе.")
 	}
 
-	if session := b.sessionManager.GetSession(userID); session != nil {
+	if session := b.sessionManager.GetSession(UserID); session != nil {
+		log.Printf("Found active session for user %d, type: %s", UserID, session.Type)
 		b.handleSessionMessage(ctx, message, session)
 		return
 	}
@@ -461,41 +379,15 @@ func (b *Bot) processMessage(ctx context.Context, message *Message) {
 		return
 	}
 
-	switch command {
-	case CommandStart:
-		b.sendMainMenu(chatID)
-	case CommandTotal, CommandTotalRu:
-		b.sendTotalBalanceCommand(ctx, chatID, domain.UserId(message.UserID))
-	case CommandDeposits, CommandDepositsRu1, CommandDepositsRu2:
-		b.sendDepositsCommand(ctx, chatID, domain.UserId(message.UserID))
-	case CommandCreateDeposit, CommandCreateDepositRu:
-		b.startSession(ctx, message, SessionCreateDeposit)
-	case CommandBrokerageAccounts, CommandBrokerageAccountsRu1, CommandBrokerageAccountsRu2:
-		b.sendBrokerageAccountsCommand(ctx, chatID, domain.UserId(message.UserID))
-	case CommandCreateBrokerageAccount, CommandCreateBrokerageAccountRu:
-		b.startSession(ctx, message, SessionCreateBrokerageAccountSession)
-	case CommandSavingAccounts, CommandSavingAccountsRu1, CommandSavingAccountsRu2:
-		b.sendSavingAccountsCommand(ctx, chatID, domain.UserId(message.UserID))
-	case CommandCreateSavingAccount, CommandCreateSavingAccountRu:
-		b.startSession(ctx, message, SessionCreateSavingAccount)
-	case CommandCashHoldings, CommandCashHoldingsRu1, CommandCashHoldingsRu2:
-		b.sendCashHoldingsCommand(ctx, chatID, domain.UserId(message.UserID))
-	case CommandCreateCashHolding, CommandCreateCashHoldingRu:
-		b.startSession(ctx, message, SessionCreateCashHolding)
-	case CommandRates, CommandRatesRu1, CommandRatesRu2:
-		b.sendCurrencyRatesCommand(ctx, chatID)
-	default:
-		b.sendMessage(chatID, "Неизвестная команда. Используйте меню ниже или введите /help:")
-		b.sendMainMenu(chatID)
-	}
+	b.sendMainMenu(chatID)
 }
 
-func (b *Bot) startSession(ctx context.Context, msg *Message, sessionType SessionType) {
-	userID := domain.UserId(msg.UserID)
+func (b *Bot) startSession(ctx context.Context, msg *domain.Message, sessionType SessionType) {
+	UserID := domain.UserID(msg.UserID)
 	chatID := msg.ChatID
 
 	sessionHandler := func(ctx context.Context, input interface{}) (interface{}, error) {
-		b.createAndStartSession(ctx, userID, chatID, msg, sessionType)
+		b.createAndStartSession(ctx, UserID, chatID, msg, sessionType)
 		return nil, nil
 	}
 	wrappedHandler := b.interceptor.Chain(sessionHandler, "Bot.startSession")
@@ -506,8 +398,8 @@ func (b *Bot) startSession(ctx context.Context, msg *Message, sessionType Sessio
 	}
 }
 
-func (b *Bot) createAndStartSession(ctx context.Context, userID domain.UserId, chatID int64, msg *Message, sessionType SessionType) {
-	session, err := b.sessionManager.StartSession(userID, chatID, sessionType)
+func (b *Bot) createAndStartSession(ctx context.Context, UserID domain.UserID, chatID int64, msg *domain.Message, sessionType SessionType) {
+	session, err := b.sessionManager.StartSession(UserID, chatID, sessionType)
 	if err != nil {
 		b.sendErrorMessage(ctx, chatID, err, "start_session")
 		return
@@ -517,11 +409,11 @@ func (b *Bot) createAndStartSession(ctx context.Context, userID domain.UserId, c
 
 	if err = session.Handler.HandleStep(ctx, b, session, msg); err != nil {
 		b.sendErrorMessage(ctx, chatID, err, "session_step")
-		b.sessionManager.ClearSession(userID)
+		b.sessionManager.ClearSession(UserID)
 	}
 }
 
-func (b *Bot) handleSessionMessage(ctx context.Context, msg *Message, session *UserSession) {
+func (b *Bot) handleSessionMessage(ctx context.Context, msg *domain.Message, session *UserSession) {
 	handler := func(ctx context.Context, message interface{}) error {
 		b.sessionManager.UpdateLastActivity(session.UserID)
 		b.processSessionMessage(ctx, msg, session)
@@ -538,8 +430,7 @@ func (b *Bot) handleSessionMessage(ctx context.Context, msg *Message, session *U
 	}
 }
 
-func (b *Bot) processSessionMessage(ctx context.Context, msg *Message, session *UserSession) {
-
+func (b *Bot) processSessionMessage(ctx context.Context, msg *domain.Message, session *UserSession) {
 	if strings.ToLower(msg.Text) == "/cancel" || strings.ToLower(msg.Text) == "отмена" {
 		b.cancelSession(session.UserID, session.ChatID)
 		return
@@ -550,8 +441,8 @@ func (b *Bot) processSessionMessage(ctx context.Context, msg *Message, session *
 	}
 }
 
-func (b *Bot) cancelSession(userID domain.UserId, chatID int64) {
-	b.sessionManager.ClearSession(userID)
+func (b *Bot) cancelSession(UserID domain.UserID, chatID int64) {
+	b.sessionManager.ClearSession(UserID)
 	b.sendMessage(chatID, "❌ Операция отменена.")
 }
 
@@ -567,7 +458,7 @@ func (wp *WorkerPool) Start(ctx context.Context) {
 		wp.wg.Add(1)
 		go wp.worker(ctx, i+1)
 	}
-	log.Printf("Started %s workers", FormatInteger(int64(wp.workers)))
+	log.Printf("Started %s workers", utils.FormatInteger(int64(wp.workers)))
 }
 
 func (wp *WorkerPool) Stop() {
@@ -579,16 +470,16 @@ func (wp *WorkerPool) Stop() {
 func (wp *WorkerPool) worker(ctx context.Context, workerID int64) {
 	defer wp.wg.Done()
 
-	log.Printf("Worker %s started", FormatInteger(workerID))
+	log.Printf("Worker %s started", utils.FormatInteger(workerID))
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Printf("Worker %s stopping due to context cancellation", FormatInteger(workerID))
+			log.Printf("Worker %s stopping due to context cancellation", utils.FormatInteger(workerID))
 			return
 		case job, ok := <-wp.jobChannel:
 			if !ok {
-				log.Printf("Worker %s stopping due to closed channel", FormatInteger(workerID))
+				log.Printf("Worker %s stopping due to closed channel", utils.FormatInteger(workerID))
 				return
 			}
 
@@ -643,6 +534,10 @@ func (b *Bot) setupBotCommands() error {
 		{
 			Command:     "rates",
 			Description: "💱 Курсы валют",
+		},
+		{
+			Command:     "financial_advice",
+			Description: "💡 Получить финансовые советы",
 		},
 	}
 

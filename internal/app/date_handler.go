@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/aniats/FiatFormaggio/internal/errors"
+	"github.com/aniats/FiatFormaggio/internal/utils"
 )
 
 func ParseDate(dateStr string) (time.Time, error) {
@@ -21,7 +22,7 @@ func ParseDate(dateStr string) (time.Time, error) {
 		}
 	}
 
-	return time.Time{}, errors.ErrInvalidDateFormat
+	return time.Time{}, errors.ErrInValidDateFormat
 }
 
 func ValidateDate(date time.Time) error {
@@ -45,7 +46,7 @@ type ExpirationDateHandler struct {
 func HandleExpirationDate(bot *Bot, session *UserSession, input string, handler ExpirationDateHandler) error {
 	dateStr := strings.TrimSpace(input)
 
-	if IsSkipResponse(dateStr) {
+	if utils.IsSkipResponse(dateStr) {
 		if handler.StoreAsPointer {
 			session.SetData(handler.DataKey, nil)
 		}

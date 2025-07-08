@@ -16,6 +16,7 @@ const (
 	SessionCreateSavingAccount           SessionType = "create_saving_account"
 	SessionCreateBrokerageAccountSession SessionType = "create_brokerage_account_session"
 	SessionCreateCashHolding             SessionType = "create_cash_holding"
+	SessionFinancialAdvice               SessionType = "financial_advice"
 )
 
 type SessionStep string
@@ -30,20 +31,17 @@ const (
 	StepCategory     SessionStep = "category"
 	StepAccount      SessionStep = "account"
 	StepConfirmation SessionStep = "confirmation"
-	StepComplete     SessionStep = "complete"
 )
 
 type SessionHandler interface {
 	GetSessionType() SessionType
-	HandleStep(ctx context.Context, bot *Bot, session *UserSession, msg *Message) error
-	GetNextStep(currentStep SessionStep, input string) (SessionStep, error)
-	ValidateInput(step SessionStep, input string) error
+	HandleStep(ctx context.Context, bot *Bot, session *UserSession, msg *domain.Message) error
 	FormatConfirmation(session *UserSession) string
 	CompleteSession(ctx context.Context, bot *Bot, session *UserSession) error
 }
 
 type UserSession struct {
-	UserID       domain.UserId
+	UserID       domain.UserID
 	ChatID       int64
 	Type         SessionType
 	CurrentStep  SessionStep
@@ -54,13 +52,13 @@ type UserSession struct {
 }
 
 type UserSessionManager struct {
-	sessions map[domain.UserId]*UserSession
+	sessions map[domain.UserID]*UserSession
 	handlers map[SessionType]SessionHandler
 }
 
-func NewUserSessionManager() *UserSessionManager {
+func NewUserSessionManager(financeService FinanceService) *UserSessionManager {
 	manager := &UserSessionManager{
-		sessions: make(map[domain.UserId]*UserSession),
+		sessions: make(map[domain.UserID]*UserSession),
 		handlers: make(map[SessionType]SessionHandler),
 	}
 
@@ -68,6 +66,7 @@ func NewUserSessionManager() *UserSessionManager {
 	manager.RegisterHandler(&BrokerageAccountCreationHandler{})
 	manager.RegisterHandler(&SavingAccountCreationHandler{})
 	manager.RegisterHandler(&CashHoldingCreationHandler{})
+	manager.RegisterHandler(&FinancialAdviceHandler{})
 
 	return manager
 }
@@ -76,14 +75,14 @@ func (usm *UserSessionManager) RegisterHandler(handler SessionHandler) {
 	usm.handlers[handler.GetSessionType()] = handler
 }
 
-func (usm *UserSessionManager) StartSession(userID domain.UserId, chatID int64, sessionType SessionType) (*UserSession, error) {
+func (usm *UserSessionManager) StartSession(UserID domain.UserID, chatID int64, sessionType SessionType) (*UserSession, error) {
 	handler, exists := usm.handlers[sessionType]
 	if !exists {
 		return nil, errors.NewUnknownSessionHandlerError(string(sessionType))
 	}
 
 	session := &UserSession{
-		UserID:       userID,
+		UserID:       UserID,
 		ChatID:       chatID,
 		Type:         sessionType,
 		CurrentStep:  StepStart,
@@ -93,25 +92,24 @@ func (usm *UserSessionManager) StartSession(userID domain.UserId, chatID int64, 
 		CreatedAt:    time.Now(),
 	}
 
-	usm.sessions[userID] = session
+	usm.sessions[UserID] = session
 	return session, nil
 }
 
-func (usm *UserSessionManager) GetSession(userID domain.UserId) *UserSession {
-	return usm.sessions[userID]
+func (usm *UserSessionManager) GetSession(UserID domain.UserID) *UserSession {
+	return usm.sessions[UserID]
 }
 
-func (usm *UserSessionManager) ClearSession(userID domain.UserId) {
-	delete(usm.sessions, userID)
+func (usm *UserSessionManager) ClearSession(UserID domain.UserID) {
+	delete(usm.sessions, UserID)
 	metrics.DecrementActiveSessions()
 }
 
-func (usm *UserSessionManager) UpdateLastActivity(userID domain.UserId) {
-	if session := usm.sessions[userID]; session != nil {
+func (usm *UserSessionManager) UpdateLastActivity(UserID domain.UserID) {
+	if session := usm.sessions[UserID]; session != nil {
 		session.LastActivity = time.Now()
 	}
 }
-
 
 func (s *UserSession) GetData(key string) interface{} {
 	return s.Data[key]

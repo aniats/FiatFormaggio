@@ -1,9 +1,9 @@
 package domain
 
-type UserId int64
+type UserID int64
 
 type User struct {
-	UserId    UserId
+	UserID    UserID
 	Username  string
 	FirstName string
 	LastName  string

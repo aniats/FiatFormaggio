@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
+
 	"github.com/aniats/FiatFormaggio/internal/domain"
 	"github.com/aniats/FiatFormaggio/internal/errors"
 	"github.com/aniats/FiatFormaggio/internal/repository"
@@ -27,26 +28,26 @@ func (r *SavingAccountRepository) CreateSavingAccount(ctx context.Context, accou
 				expiration_date, 
 				currency
 			) VALUES ($1, $2, $3, $4, $5, $6)
-			RETURNING id`
+			RETURNING ID`
 
-		var id int64
+		var ID int64
 
 		err := r.DB.QueryRowContext(
 			ctx,
 			query,
-			account.UserId,
+			account.UserID,
 			account.Name,
 			account.AmountMinorUnits,
 			account.InterestRateBasisPoints,
 			account.ExpirationDate,
 			account.Currency,
-		).Scan(&id)
+		).Scan(&ID)
 
 		if err != nil {
 			return nil, errors.WrapRepositoryError(err)
 		}
 
-		account.Id = id
+		account.ID = ID
 		return nil, nil
 	}
 
@@ -54,7 +55,7 @@ func (r *SavingAccountRepository) CreateSavingAccount(ctx context.Context, accou
 	return err
 }
 
-func (r *SavingAccountRepository) GetSavingAccountsByUserID(ctx context.Context, userId domain.UserId) ([]domain.SavingAccount, error) {
+func (r *SavingAccountRepository) GetSavingAccountsByUserID(ctx context.Context, UserID domain.UserID) ([]domain.SavingAccount, error) {
 	query := `
         SELECT 
             id, 
@@ -68,7 +69,7 @@ func (r *SavingAccountRepository) GetSavingAccountsByUserID(ctx context.Context,
         WHERE user_id = $1
         ORDER BY created_at DESC`
 
-	rows, err := r.DB.QueryContext(ctx, query, userId)
+	rows, err := r.DB.QueryContext(ctx, query, UserID)
 	if err != nil {
 		return nil, errors.WrapRepositoryError(err)
 	}
@@ -81,8 +82,8 @@ func (r *SavingAccountRepository) GetSavingAccountsByUserID(ctx context.Context,
 		var expirationDate sql.NullTime
 
 		err := rows.Scan(
-			&account.Id,
-			&account.UserId,
+			&account.ID,
+			&account.UserID,
 			&account.Name,
 			&account.AmountMinorUnits,
 			&interestRateBasisPoints,

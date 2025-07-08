@@ -3,12 +3,15 @@ package app
 import (
 	"context"
 	"fmt"
-	"github.com/aniats/FiatFormaggio/internal/domain"
-	"github.com/aniats/FiatFormaggio/internal/errors"
-	"github.com/aniats/FiatFormaggio/internal/service/finance/models"
+	"github.com/aniats/FiatFormaggio/internal/utils"
+	"github.com/aniats/FiatFormaggio/internal/tracing"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/aniats/FiatFormaggio/internal/domain"
+	"github.com/aniats/FiatFormaggio/internal/errors"
+	"github.com/aniats/FiatFormaggio/internal/service/finance/models"
 )
 
 type DepositCreationHandler struct{}
@@ -17,15 +20,15 @@ func (h *DepositCreationHandler) GetSessionType() SessionType {
 	return SessionCreateDeposit
 }
 
-func (h *DepositCreationHandler) HandleStep(ctx context.Context, bot *Bot, session *UserSession, msg *Message) error {
+func (h *DepositCreationHandler) HandleStep(ctx context.Context, bot *Bot, session *UserSession, msg *domain.Message) error {
 	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
 		return nil, h.processStep(ctx, bot, session, msg)
 	}
 
 	params := map[string]interface{}{
-		"user_id":      int64(session.UserID),
-		"session_step": string(session.CurrentStep),
-		"session_type": "create_deposit",
+		tracing.ParamUserID:      int64(session.UserID),
+		tracing.ParamSessionStep: string(session.CurrentStep),
+		tracing.ParamSessionType: "create_deposit",
 	}
 
 	wrappedHandler := bot.interceptor.Chain(handler, "DepositCreationHandler.HandleStep")
@@ -33,7 +36,7 @@ func (h *DepositCreationHandler) HandleStep(ctx context.Context, bot *Bot, sessi
 	return err
 }
 
-func (h *DepositCreationHandler) processStep(ctx context.Context, bot *Bot, session *UserSession, msg *Message) error {
+func (h *DepositCreationHandler) processStep(ctx context.Context, bot *Bot, session *UserSession, msg *domain.Message) error {
 	switch session.CurrentStep {
 	case StepStart:
 		return h.handleStart(bot, session)
@@ -70,7 +73,7 @@ func (h *DepositCreationHandler) handleStart(bot *Bot, session *UserSession) err
 func (h *DepositCreationHandler) handleName(bot *Bot, session *UserSession, input string) error {
 	name := strings.TrimSpace(input)
 
-	if err := h.validateName(name); err != nil {
+	if err := h.ValidateName(name); err != nil {
 		bot.sendMessage(session.ChatID, fmt.Sprintf("❌ %s Попробуйте еще раз:", err.Error()))
 		return nil
 	}
@@ -85,7 +88,7 @@ func (h *DepositCreationHandler) handleName(bot *Bot, session *UserSession, inpu
 		
 		Минимум: %s 
 		Максимум: %s
-		`, name, FormatInteger(100000), FormatNumber(50000.50), FormatInteger(1), FormatInteger(1000000000))
+		`, name, utils.FormatInteger(100000), utils.FormatNumber(50000.50), utils.FormatInteger(1), utils.FormatInteger(1000000000))
 
 	bot.sendMessage(session.ChatID, text)
 	return nil
@@ -94,11 +97,11 @@ func (h *DepositCreationHandler) handleName(bot *Bot, session *UserSession, inpu
 func (h *DepositCreationHandler) handleAmount(bot *Bot, session *UserSession, input string) error {
 	amount, err := strconv.ParseFloat(strings.TrimSpace(input), 64)
 	if err != nil {
-		bot.sendMessage(session.ChatID, fmt.Sprintf("❌ Некорректная сумма. Введите число (например: %s или %s):", FormatInteger(100000), FormatNumber(50000.50)))
+		bot.sendMessage(session.ChatID, fmt.Sprintf("❌ Некорректная сумма. Введите число (например: %s или %s):", utils.FormatInteger(100000), utils.FormatNumber(50000.50)))
 		return nil
 	}
 
-	if err = h.validateAmount(amount); err != nil {
+	if err = h.ValidateAmount(amount); err != nil {
 		bot.sendMessage(session.ChatID, fmt.Sprintf("❌ %s Попробуйте еще раз:", err.Error()))
 		return nil
 	}
@@ -108,9 +111,9 @@ func (h *DepositCreationHandler) handleAmount(bot *Bot, session *UserSession, in
 
 	text := fmt.Sprintf(`✅ Сумма: %s
 
-Шаг 3/5: Выберите валюту
-
-💰 Выберите валюту из списка ниже или введите код валюты:`, FormatNumber(amount))
+	Шаг 3/5: Выберите валюту
+	
+	💰 Выберите валюту из списка ниже или введите код валюты:`, utils.FormatNumber(amount))
 
 	keyboard := CreateCurrencySelectionKeyboard()
 	bot.sendMessageWithKeyboard(session.ChatID, text, keyboard)
@@ -120,8 +123,8 @@ func (h *DepositCreationHandler) handleAmount(bot *Bot, session *UserSession, in
 func (h *DepositCreationHandler) handleCurrency(bot *Bot, session *UserSession, input string) error {
 	currencyStr := strings.TrimSpace(input)
 
-	if strings.HasPrefix(input, CallbackCurrencyPrefix) {
-		currencyCode := strings.TrimPrefix(input, CallbackCurrencyPrefix)
+	if strings.HasPrefix(input, domain.CallbackCurrencyPrefix) {
+		currencyCode := strings.TrimPrefix(input, domain.CallbackCurrencyPrefix)
 
 		if currencyCode == "skip" {
 			session.SetData("currency", domain.RUB)
@@ -142,7 +145,7 @@ func (h *DepositCreationHandler) handleCurrency(bot *Bot, session *UserSession, 
 		return nil
 	}
 
-	if IsSkipResponse(currencyStr) {
+	if utils.IsSkipResponse(currencyStr) {
 		session.SetData("currency", domain.RUB)
 		session.CurrentStep = StepInterestRate
 		h.sendInterestRatePrompt(bot, session)
@@ -151,20 +154,21 @@ func (h *DepositCreationHandler) handleCurrency(bot *Bot, session *UserSession, 
 
 	currency, err := domain.CurrencyFromHuman(currencyStr)
 	if err != nil {
-		text := fmt.Sprintf(`❌ Неизвестная валюта "%s"
+		text := fmt.Sprintf(`
+		❌ Неизвестная валюта "%s"
 
-Доступные варианты:
-• RUB - Российский рубль ₽
-• USD - Доллар США $
-• EUR - Евро €
-• GBP - Британский фунт £
-• JPY - Японская иена ¥
-• CNY - Китайский юань ¥
-• RSD - Сербский динар
-• XBT - Биткоин ₿
-• KZT - Казахстанский тенге
-
-Используйте кнопки выше или введите код валюты:`, currencyStr)
+		Доступные варианты:
+		• RUB - Российский рубль ₽
+		• USD - Доллар США $
+		• EUR - Евро €
+		• GBP - Британский фунт £
+		• JPY - Японская иена ¥
+		• CNY - Китайский юань ¥
+		• RSD - Сербский динар
+		• XBT - Биткоин ₿
+		• KZT - Казахстанский тенге
+		
+		Используйте кнопки выше или введите код валюты:`, currencyStr)
 		bot.sendMessage(session.ChatID, text)
 		return nil
 	}
@@ -172,7 +176,7 @@ func (h *DepositCreationHandler) handleCurrency(bot *Bot, session *UserSession, 
 	if !h.isCurrencyAllowed(currency) {
 		text := fmt.Sprintf(`❌ Валюта "%s" (%s) не поддерживается
 
-Используйте кнопки выше для выбора поддерживаемой валюты:`, currency, currency.ToHumanRussian())
+		Используйте кнопки выше для выбора поддерживаемой валюты:`, currency, currency.ToHumanRussian())
 		bot.sendMessage(session.ChatID, text)
 		return nil
 	}
@@ -189,11 +193,11 @@ func (h *DepositCreationHandler) sendInterestRatePrompt(bot *Bot, session *UserS
 
 	text := fmt.Sprintf(`✅ Валюта: %s (%s)
 
-			Шаг 4/5: Введите процентную ставку (необязательно)
-			Например: 5.5; 3.25; 7.0
-			
-			Диапазон: 0-50%%
-			Введите "пропустить" если не хотите указывать`,
+		Шаг 4/5: Введите процентную ставку (необязательно)
+		Например: 5.5; 3.25; 7.0
+		
+		Диапазон: 0-50%%
+		Введите "пропустить" если не хотите указывать`,
 		currency,
 		currency.ToHumanRussian())
 
@@ -203,7 +207,7 @@ func (h *DepositCreationHandler) sendInterestRatePrompt(bot *Bot, session *UserS
 func (h *DepositCreationHandler) handleInterestRate(bot *Bot, session *UserSession, input string) error {
 	rateStr := strings.TrimSpace(input)
 
-	if IsSkipResponse(rateStr) {
+	if utils.IsSkipResponse(rateStr) {
 		session.CurrentStep = StepDate
 		h.sendExpirationDatePrompt(bot, session)
 		return nil
@@ -215,7 +219,7 @@ func (h *DepositCreationHandler) handleInterestRate(bot *Bot, session *UserSessi
 		return nil
 	}
 
-	if err = h.validateInterestRate(rate); err != nil {
+	if err = h.ValidateInterestRate(rate); err != nil {
 		bot.sendMessage(session.ChatID, fmt.Sprintf("❌ %s Попробуйте еще раз:", err.Error()))
 		return nil
 	}
@@ -230,7 +234,7 @@ func (h *DepositCreationHandler) handleInterestRate(bot *Bot, session *UserSessi
 func (h *DepositCreationHandler) sendExpirationDatePrompt(bot *Bot, session *UserSession) {
 	rateText := "не указана"
 	if rate := session.GetFloat("interest_rate"); rate > 0 {
-		rateText = fmt.Sprintf("%s%%", FormatNumber(rate))
+		rateText = fmt.Sprintf("%s%%", utils.FormatNumber(rate))
 	}
 
 	text := fmt.Sprintf(`✅ Процентная ставка: %s
@@ -257,47 +261,39 @@ func (h *DepositCreationHandler) sendConfirmationPrompt(bot *Bot, session *UserS
 	text := h.FormatConfirmation(session)
 	text += "\n\n🔍 Подтвердите создание депозита:"
 
-	keyboard := CreateConfirmationKeyboard(CallbackConfirmDepositYes, CallbackConfirmDepositNo)
+	keyboard := CreateConfirmationKeyboard(domain.CallbackConfirmDepositYes, domain.CallbackConfirmDepositNo)
 	bot.sendMessageWithKeyboard(session.ChatID, text, keyboard)
 }
 
 func (h *DepositCreationHandler) handleConfirmation(ctx context.Context, bot *Bot, session *UserSession, input string) error {
-	if input == CallbackConfirmDepositYes {
+	if input == domain.CallbackConfirmDepositYes {
 		bot.sessionManager.ClearSession(session.UserID)
 		return h.CompleteSession(ctx, bot, session)
 	}
 
-	if input == CallbackConfirmDepositNo {
+	if input == domain.CallbackConfirmDepositNo {
 		bot.sessionManager.ClearSession(session.UserID)
 		bot.sendMessage(session.ChatID, "❌ Создание депозита отменено.")
 		return nil
 	}
 
-	if IsNegativeResponse(input) {
+	if utils.IsNegativeResponse(input) {
 		bot.sessionManager.ClearSession(session.UserID)
 		bot.sendMessage(session.ChatID, "❌ Создание депозита отменено.")
 		return nil
 	}
 
-	if !IsPositiveResponse(input) {
-		if IsValidResponse(input) {
+	if !utils.IsPositiveResponse(input) {
+		if utils.IsValidResponse(input) {
 			bot.sendMessage(session.ChatID, "❓ Используйте кнопки выше или введите 'да' для создания или 'нет' для отмены:")
 		} else {
-			bot.sendMessage(session.ChatID, GetSuggestionMessage())
+			bot.sendMessage(session.ChatID, utils.GetSuggestionMessage())
 		}
 		return nil
 	}
 
 	bot.sessionManager.ClearSession(session.UserID)
 	return h.CompleteSession(ctx, bot, session)
-}
-
-func (h *DepositCreationHandler) GetNextStep(currentStep SessionStep, input string) (SessionStep, error) {
-	return currentStep, nil
-}
-
-func (h *DepositCreationHandler) ValidateInput(step SessionStep, input string) error {
-	return nil
 }
 
 func (h *DepositCreationHandler) FormatConfirmation(session *UserSession) string {
@@ -307,11 +303,11 @@ func (h *DepositCreationHandler) FormatConfirmation(session *UserSession) string
 
 	text := "📋 Подтверждение создания депозита:\n\n"
 	text += fmt.Sprintf("📝 Название: %s\n", name)
-	text += fmt.Sprintf("💰 Сумма: %s %s\n", FormatNumber(amount), currency.Symbol())
+	text += fmt.Sprintf("💰 Сумма: %s %s\n", utils.FormatNumber(amount), currency.Symbol())
 	text += fmt.Sprintf("💱 Валюта: %s (%s)\n", currency, currency.ToHumanRussian())
 
 	if rate := session.GetFloat("interest_rate"); rate > 0 {
-		text += fmt.Sprintf("📈 Процентная ставка: %s%%\n", FormatNumber(rate))
+		text += fmt.Sprintf("📈 Процентная ставка: %s%%\n", utils.FormatNumber(rate))
 	} else {
 		text += "📈 Процентная ставка: не указана\n"
 	}
@@ -370,7 +366,7 @@ func (h *DepositCreationHandler) executeCompletion(ctx context.Context, bot *Bot
 	return nil
 }
 
-func (h *DepositCreationHandler) validateName(name string) error {
+func (h *DepositCreationHandler) ValidateName(name string) error {
 	if name == "" {
 		return errors.ErrNameEmpty
 	}
@@ -380,7 +376,7 @@ func (h *DepositCreationHandler) validateName(name string) error {
 	return nil
 }
 
-func (h *DepositCreationHandler) validateAmount(amount float64) error {
+func (h *DepositCreationHandler) ValidateAmount(amount float64) error {
 	if amount <= 0 {
 		return errors.ErrAmountNotPositive
 	}
@@ -390,7 +386,7 @@ func (h *DepositCreationHandler) validateAmount(amount float64) error {
 	return nil
 }
 
-func (h *DepositCreationHandler) validateInterestRate(rate float64) error {
+func (h *DepositCreationHandler) ValidateInterestRate(rate float64) error {
 	if rate < 0 || rate > 50 {
 		return errors.ErrRateOutOfRange
 	}
@@ -406,11 +402,11 @@ func (h *DepositCreationHandler) sendDepositCreatedConfirmation(bot *Bot, chatID
 
 	text := fmt.Sprintf("✅ Депозит успешно создан!\n\n")
 	text += fmt.Sprintf("📋 Название: %s\n", deposit.Name)
-	text += fmt.Sprintf("💰 Сумма: %s %s\n", FormatNumber(amount), deposit.Currency)
+	text += fmt.Sprintf("💰 Сумма: %s %s\n", utils.FormatNumber(amount), deposit.Currency)
 
 	if deposit.InterestRateBasisPoints > 0 {
 		rate := float64(deposit.InterestRateBasisPoints) / 100.0
-		text += fmt.Sprintf("📈 Процентная ставка: %s%%\n", FormatNumber(rate))
+		text += fmt.Sprintf("📈 Процентная ставка: %s%%\n", utils.FormatNumber(rate))
 	} else {
 		text += "📈 Процентная ставка: не указана\n"
 	}
@@ -421,7 +417,7 @@ func (h *DepositCreationHandler) sendDepositCreatedConfirmation(bot *Bot, chatID
 		text += "📅 Дата окончания: не указана\n"
 	}
 
-	text += fmt.Sprintf("🆔 ID: %s\n", FormatInteger(int64(deposit.Id)))
+	text += fmt.Sprintf("🆔 ID: %s\n", utils.FormatInteger(deposit.ID))
 	text += fmt.Sprintf("📅 Создан: %s", time.Now().Format("02.01.2006 15:04"))
 
 	bot.sendMessage(chatID, text)

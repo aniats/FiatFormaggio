@@ -3,30 +3,31 @@ package app
 import (
 	"context"
 	"fmt"
+	"github.com/aniats/FiatFormaggio/internal/utils"
 	"sort"
 
 	"github.com/aniats/FiatFormaggio/internal/domain"
 )
 
-func (b *Bot) sendTotalBalanceCommand(ctx context.Context, chatID int64, userID domain.UserId) {
+func (b *Bot) sendTotalBalanceCommand(ctx context.Context, chatID int64, UserID domain.UserID) {
 	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
 		params := input.(map[string]interface{})
 		chatID := params["chatID"].(int64)
-		userID := params["userID"].(domain.UserId)
+		UserID := params["UserID"].(domain.UserID)
 
-		return b.processTotalBalanceCommand(ctx, chatID, userID)
+		return b.processTotalBalanceCommand(ctx, chatID, UserID)
 	}
 
 	params := map[string]interface{}{
 		"chatID": chatID,
-		"userID": userID,
+		"UserID": UserID,
 	}
 
 	wrappedHandler := b.interceptor.Chain(handler, "Bot.sendTotalBalanceCommand")
 	_, _ = wrappedHandler(ctx, params)
 }
 
-func (b *Bot) processTotalBalanceCommand(ctx context.Context, chatID int64, userID domain.UserId) (interface{}, error) {
+func (b *Bot) processTotalBalanceCommand(ctx context.Context, chatID int64, UserID domain.UserID) (interface{}, error) {
 	rates, err := b.currencyService.GetCurrencyRates(ctx)
 	if err != nil {
 		b.sendMessage(chatID, "❌ Ошибка получения курсов валют. Попробуйте позже.")
@@ -57,36 +58,36 @@ func (b *Bot) processTotalBalanceCommand(ctx context.Context, chatID int64, user
 
 		for _, currency := range currencies {
 			rate := exchangeRates[currency]
-			message += fmt.Sprintf("  %s: %s ₽\n", currency, FormatRate(rate))
+			message += fmt.Sprintf("  %s: %s ₽\n", currency, utils.FormatRate(rate))
 		}
 		message += "\n"
 	}
 
-	if deposits, err := b.financeService.GetDepositsByUserID(ctx, userID); err == nil && len(deposits) > 0 {
+	if deposits, err := b.financeService.GetDepositsByUserID(ctx, UserID); err == nil && len(deposits) > 0 {
 		summary, totalRUB := calculateDepositsSummary(deposits, exchangeRates)
 		message += summary
 		grandTotalRUB += totalRUB
 	}
 
-	if savingAccounts, err := b.financeService.GetSavingAccountsByUserID(ctx, userID); err == nil && len(savingAccounts) > 0 {
+	if savingAccounts, err := b.financeService.GetSavingAccountsByUserID(ctx, UserID); err == nil && len(savingAccounts) > 0 {
 		summary, totalRUB := calculateSavingAccountsSummary(savingAccounts, exchangeRates)
 		message += summary
 		grandTotalRUB += totalRUB
 	}
 
-	if brokerageAccounts, err := b.financeService.GetBrokerageAccountsByUserID(ctx, userID); err == nil && len(brokerageAccounts) > 0 {
+	if brokerageAccounts, err := b.financeService.GetBrokerageAccountsByUserID(ctx, UserID); err == nil && len(brokerageAccounts) > 0 {
 		summary, totalRUB := calculateBrokerageAccountsSummary(brokerageAccounts, exchangeRates)
 		message += summary
 		grandTotalRUB += totalRUB
 	}
 
-	if cashHoldings, err := b.financeService.GetCashHoldingsByUserID(ctx, userID); err == nil && len(cashHoldings) > 0 {
+	if cashHoldings, err := b.financeService.GetCashHoldingsByUserID(ctx, UserID); err == nil && len(cashHoldings) > 0 {
 		summary, totalRUB := calculateCashHoldingsSummary(cashHoldings, exchangeRates)
 		message += summary
 		grandTotalRUB += totalRUB
 	}
 
-	message += fmt.Sprintf("🎯 ИТОГО: %s ₽\n", FormatNumber(grandTotalRUB))
+	message += fmt.Sprintf("🎯 ИТОГО: %s ₽\n", utils.FormatNumber(grandTotalRUB))
 	b.sendMessage(chatID, message)
 	b.sendMainMenu(chatID)
 	return nil, nil
@@ -99,7 +100,7 @@ func buildExchangeRateMap(rates []domain.CurrencyRate) map[domain.CurrencyName]f
 
 	for _, rate := range rates {
 		if rate.BaseCurrency == domain.RUB {
-			exchangeRates[rate.Currency] = float64(rate.RateMinorUnits) / DefaultMinorUnits
+			exchangeRates[rate.Currency] = float64(rate.RateMinorUnits) / utils.DefaultMinorUnits
 		}
 	}
 
@@ -121,7 +122,7 @@ func calculateDepositsSummary(deposits []domain.Deposit, exchangeRates map[domai
 	var totalRUB float64
 
 	for _, deposit := range deposits {
-		amount := float64(deposit.AmountMinorUnits) / DefaultMinorUnits
+		amount := float64(deposit.AmountMinorUnits) / utils.DefaultMinorUnits
 		currency := deposit.Currency
 		amountRUB := convertToRUB(amount, currency, exchangeRates)
 
@@ -137,7 +138,7 @@ func calculateSavingAccountsSummary(accounts []domain.SavingAccount, exchangeRat
 	var totalRUB float64
 
 	for _, account := range accounts {
-		amount := float64(account.AmountMinorUnits) / DefaultMinorUnits
+		amount := float64(account.AmountMinorUnits) / utils.DefaultMinorUnits
 		currency := account.Currency
 		amountRUB := convertToRUB(amount, currency, exchangeRates)
 
@@ -153,7 +154,7 @@ func calculateBrokerageAccountsSummary(accounts []domain.BrokerageAccount, excha
 	var totalRUB float64
 
 	for _, account := range accounts {
-		amount := float64(account.AmountMinorUnits) / DefaultMinorUnits
+		amount := float64(account.AmountMinorUnits) / utils.DefaultMinorUnits
 		currency := account.Currency
 		amountRUB := convertToRUB(amount, currency, exchangeRates)
 
@@ -169,7 +170,7 @@ func calculateCashHoldingsSummary(holdings []domain.CashHolding, exchangeRates m
 	var totalRUB float64
 
 	for _, holding := range holdings {
-		amount := float64(holding.AmountMinorUnits) / DefaultMinorUnits
+		amount := float64(holding.AmountMinorUnits) / utils.DefaultMinorUnits
 		currency := holding.Currency
 		amountRUB := convertToRUB(amount, currency, exchangeRates)
 
@@ -181,7 +182,7 @@ func calculateCashHoldingsSummary(holdings []domain.CashHolding, exchangeRates m
 }
 
 func formatAccountSummary(accountType string, count int64, currencyTotals map[domain.CurrencyName]float64, totalRUB float64, exchangeRates map[domain.CurrencyName]float64) string {
-	message := fmt.Sprintf("📊 %s (%s):\n", accountType, FormatInteger(count))
+	message := fmt.Sprintf("📊 %s (%s):\n", accountType, utils.FormatInteger(count))
 
 	var currencies []domain.CurrencyName
 	for currency := range currencyTotals {
@@ -193,15 +194,15 @@ func formatAccountSummary(accountType string, count int64, currencyTotals map[do
 
 	for _, currency := range currencies {
 		amount := currencyTotals[currency]
-		message += fmt.Sprintf("  %s: %s %s", currency, FormatNumber(amount), currency.Symbol())
+		message += fmt.Sprintf("  %s: %s %s", currency, utils.FormatNumber(amount), currency.Symbol())
 
 		if currency != domain.RUB {
 			rubEquivalent := amount * exchangeRates[currency]
-			message += fmt.Sprintf(" (%s ₽)", FormatNumber(rubEquivalent))
+			message += fmt.Sprintf(" (%s ₽)", utils.FormatNumber(rubEquivalent))
 		}
 		message += "\n"
 	}
 
-	message += fmt.Sprintf("  Всего: %s ₽\n\n", FormatNumber(totalRUB))
+	message += fmt.Sprintf("  Всего: %s ₽\n\n", utils.FormatNumber(totalRUB))
 	return message
 }

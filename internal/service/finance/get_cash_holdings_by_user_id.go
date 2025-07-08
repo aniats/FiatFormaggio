@@ -7,22 +7,22 @@ import (
 	"github.com/aniats/FiatFormaggio/internal/errors"
 )
 
-func (s *FinanceService) GetCashHoldingsByUserID(ctx context.Context, userID domain.UserId) ([]domain.CashHolding, error) {
+func (s *FinanceService) GetCashHoldingsByUserID(ctx context.Context, UserID domain.UserID) ([]domain.CashHolding, error) {
 	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
-		if userID <= 0 {
-			return nil, errors.ErrInvalidUserID.WithContext("userID", userID)
+		if UserID <= 0 {
+			return nil, errors.ErrInValidUserID.WithContext("UserID", UserID)
 		}
 
-		holdings, err := s.repo.GetCashHoldingsByUserID(ctx, userID)
+		holdings, err := s.repo.GetCashHoldingsByUserID(ctx, UserID)
 		if err != nil {
-			return nil, errors.WrapRepositoryError(err).WithContext("userID", userID)
+			return nil, errors.WrapRepositoryError(err).WithContext("UserID", UserID)
 		}
 
 		return holdings, nil
 	}
 
 	wrappedHandler := s.interceptor.Chain(handler, "FinanceService.GetCashHoldingsByUserID")
-	resultInterface, err := wrappedHandler(ctx, userID)
+	resultInterface, err := wrappedHandler(ctx, UserID)
 	if err != nil {
 		return nil, err
 	}

@@ -44,40 +44,40 @@ func (repo *Repository) HealthCheck(ctx context.Context) error {
 	return repo.db.HealthCheck(ctx)
 }
 
-func (repo *Repository) EnsureUserExists(ctx context.Context, userID domain.UserId, username string) (bool, error) {
-	return repo.User.EnsureUserExists(ctx, userID, username)
+func (repo *Repository) EnsureUserExists(ctx context.Context, UserID domain.UserID, username string) (bool, error) {
+	return repo.User.EnsureUserExists(ctx, UserID, username)
 }
 
 func (repo *Repository) CreateBrokerageAccount(ctx context.Context, account *domain.BrokerageAccount) error {
 	return repo.BrokerageAccount.CreateBrokerageAccount(ctx, account)
 }
 
-func (repo *Repository) GetBrokerageAccountsByUserID(ctx context.Context, userId domain.UserId) ([]domain.BrokerageAccount, error) {
-	return repo.BrokerageAccount.GetBrokerageAccountsByUserID(ctx, userId)
+func (repo *Repository) GetBrokerageAccountsByUserID(ctx context.Context, UserID domain.UserID) ([]domain.BrokerageAccount, error) {
+	return repo.BrokerageAccount.GetBrokerageAccountsByUserID(ctx, UserID)
 }
 
 func (repo *Repository) CreateSavingAccount(ctx context.Context, account *domain.SavingAccount) error {
 	return repo.SavingAccount.CreateSavingAccount(ctx, account)
 }
 
-func (repo *Repository) GetSavingAccountsByUserID(ctx context.Context, userId domain.UserId) ([]domain.SavingAccount, error) {
-	return repo.SavingAccount.GetSavingAccountsByUserID(ctx, userId)
+func (repo *Repository) GetSavingAccountsByUserID(ctx context.Context, UserID domain.UserID) ([]domain.SavingAccount, error) {
+	return repo.SavingAccount.GetSavingAccountsByUserID(ctx, UserID)
 }
 
 func (repo *Repository) CreateDeposit(ctx context.Context, deposit *domain.Deposit) error {
 	return repo.Deposit.CreateDeposit(ctx, deposit)
 }
 
-func (repo *Repository) GetDepositsByUserID(ctx context.Context, userId domain.UserId) ([]domain.Deposit, error) {
-	return repo.Deposit.GetDepositsByUserID(ctx, userId)
+func (repo *Repository) GetDepositsByUserID(ctx context.Context, UserID domain.UserID) ([]domain.Deposit, error) {
+	return repo.Deposit.GetDepositsByUserID(ctx, UserID)
 }
 
 func (repo *Repository) CreateCashHolding(ctx context.Context, cash *domain.CashHolding) error {
 	return repo.Cash.CreateCashHolding(ctx, cash)
 }
 
-func (repo *Repository) GetCashHoldingsByUserID(ctx context.Context, userId domain.UserId) ([]domain.CashHolding, error) {
-	return repo.Cash.GetCashHoldingsByUserID(ctx, userId)
+func (repo *Repository) GetCashHoldingsByUserID(ctx context.Context, UserID domain.UserID) ([]domain.CashHolding, error) {
+	return repo.Cash.GetCashHoldingsByUserID(ctx, UserID)
 }
 
 func (repo *Repository) UpsertCurrencyRate(ctx context.Context, rate *domain.CurrencyRate) error {
