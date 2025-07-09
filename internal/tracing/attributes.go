@@ -37,21 +37,6 @@ const (
 )
 
 const (
-	OpenAIModel         = "openai.model"
-	OpenAIMessagesTotal = "openai.messages.total"
-	OpenAIMaxTokens     = "openai.max_tokens"
-	OpenAITemperature   = "openai.temperature"
-
-	OpenAIResponseID      = "openai.response.id"
-	OpenAIResponseModel   = "openai.response.model"
-	OpenAIResponseChoices = "openai.response.choices"
-
-	OpenAITokensPrompt     = "openai.tokens.prompt"
-	OpenAITokensCompletion = "openai.tokens.completion"
-	OpenAITokensTotal      = "openai.tokens.total"
-)
-
-const (
 	ResponseLength        = "response.length"
 	InitialPrompt         = "initial.prompt"
 	InitialResponseLength = "initial.response.length"

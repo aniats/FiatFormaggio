@@ -13,7 +13,7 @@ const DefaultMinorUnits = 100.0
 func (s *FinanceService) GetTotalBalance(ctx context.Context, userID domain.UserID) (float64, error) {
 	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
 		params := input.(map[string]interface{})
-		userID := params["userID"].(domain.UserID)
+		userID := params[tracing.UserID].(domain.UserID)
 		return s.processGetTotalBalance(ctx, userID)
 	}
 

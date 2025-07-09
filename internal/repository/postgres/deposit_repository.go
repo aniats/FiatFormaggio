@@ -67,7 +67,7 @@ func (r *DepositRepository) GetDepositsByUserID(ctx context.Context, UserID doma
 			SELECT
 				ID,
 				user_id,
-				name, 
+				name,
 				amount_minor_units, 
 				interest_rate_basis_points, 
 				expiration_date, 

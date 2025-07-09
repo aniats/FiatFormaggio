@@ -25,23 +25,22 @@ type Interceptor struct {
 }
 
 type InterceptorConfig struct {
-	EnableTracing    bool
-	EnableMetrics    bool
-	EnableProfiling  bool
-	ServiceName      string
-	ProfileThreshold time.Duration
+	EnableTracing   bool
+	EnableMetrics   bool
+	EnableProfiling bool
+	ServiceName     string
 }
 
+// результат и ошибка
 type Handler func(ctx context.Context, input interface{}) (interface{}, error)
 type middleware func(next Handler) Handler
 
 func DefaultConfig(serviceName string) *InterceptorConfig {
 	return &InterceptorConfig{
-		EnableTracing:    true,
-		EnableMetrics:    true,
-		EnableProfiling:  true,
-		ServiceName:      serviceName,
-		ProfileThreshold: 50 * time.Millisecond,
+		EnableTracing:   true,
+		EnableMetrics:   true,
+		EnableProfiling: true,
+		ServiceName:     serviceName,
 	}
 }
 
@@ -56,13 +55,13 @@ func NewInterceptor(config *InterceptorConfig, appName string) *Interceptor {
 	}
 
 	if config.EnableTracing {
-		ui.middlewares = append(ui.middlewares, ui.tracingmiddleware)
+		ui.middlewares = append(ui.middlewares, ui.tracingMiddleware)
 	}
 	if config.EnableMetrics {
-		ui.middlewares = append(ui.middlewares, ui.metricsmiddleware)
+		ui.middlewares = append(ui.middlewares, ui.metricsMiddleware)
 	}
 	if config.EnableProfiling {
-		ui.middlewares = append(ui.middlewares, ui.profilingmiddleware)
+		ui.middlewares = append(ui.middlewares, ui.profilingMiddleware)
 	}
 
 	return ui
@@ -75,7 +74,7 @@ type ServiceWrapper struct {
 	methodCache map[string]reflect.Value
 }
 
-func (ui *Interceptor) tracingmiddleware(next Handler) Handler {
+func (ui *Interceptor) tracingMiddleware(next Handler) Handler {
 	return func(ctx context.Context, input interface{}) (interface{}, error) {
 		opName := ui.extractOperationName(ctx)
 
@@ -98,7 +97,7 @@ func (ui *Interceptor) tracingmiddleware(next Handler) Handler {
 	}
 }
 
-func (ui *Interceptor) metricsmiddleware(next Handler) Handler {
+func (ui *Interceptor) metricsMiddleware(next Handler) Handler {
 	return func(ctx context.Context, input interface{}) (interface{}, error) {
 		start := time.Now()
 
@@ -113,13 +112,12 @@ func (ui *Interceptor) metricsmiddleware(next Handler) Handler {
 	}
 }
 
-func (ui *Interceptor) profilingmiddleware(next Handler) Handler {
+func (ui *Interceptor) profilingMiddleware(next Handler) Handler {
 	return func(ctx context.Context, input interface{}) (interface{}, error) {
 		if !ui.config.EnableProfiling {
 			return next(ctx, input)
 		}
 
-		start := time.Now()
 		opName := ui.extractOperationName(ctx)
 
 		labels := pprof.Labels("operation", opName)
@@ -134,17 +132,12 @@ func (ui *Interceptor) profilingmiddleware(next Handler) Handler {
 			result, err = next(labeledCtx, input)
 		})
 
-		duration := time.Since(start)
-		if duration > ui.config.ProfileThreshold {
-			// Additional profiling for slow operations can be added here
-		}
-
 		return result, err
 	}
 }
 
 func (ui *Interceptor) Chain(handler Handler, operationName string) Handler {
-	finalHandler := func(ctx context.Context, input interface{}) (interface{}, error) {
+	finalHandler := func(ctx context.Context, tracingInputParams interface{}) (interface{}, error) {
 		ctx = context.WithValue(ctx, "operation_name", operationName)
 
 		currentHandler := handler
@@ -153,7 +146,7 @@ func (ui *Interceptor) Chain(handler Handler, operationName string) Handler {
 			currentHandler = middleware(currentHandler)
 		}
 
-		return currentHandler(ctx, input)
+		return currentHandler(ctx, tracingInputParams)
 	}
 
 	return finalHandler
@@ -184,8 +177,8 @@ func (ui *Interceptor) extractAttributes(input interface{}) []attribute.KeyValue
 		value = value.Elem()
 	}
 
-	if UserIDField := ui.findField(value, "UserID"); UserIDField.IsValid() {
-		if UserID := UserIDField.Int(); UserID > 0 {
+	if userIDField := ui.findField(value, "UserID"); userIDField.IsValid() {
+		if UserID := userIDField.Int(); UserID > 0 {
 			attrs = append(attrs, attribute.Int64(tracing.UserID, UserID))
 		}
 	}
