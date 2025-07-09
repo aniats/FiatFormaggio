@@ -8,8 +8,6 @@ import (
 
 const (
 	UpdateOffsetFromBeginning = 0
-	UpdateOffsetOnlyNew       = -1
-	UpdateOffsetResume        = 1
 )
 
 type TelegramBotAPI struct {
@@ -45,6 +43,13 @@ func (t *TelegramBotAPI) SendMessage(chatID int64, text string) error {
 	return err
 }
 
+func (t *TelegramBotAPI) SendMessageWithKeyboard(chatID int64, text string, keyboard tgBotAPI.InlineKeyboardMarkup) error {
+	msg := tgBotAPI.NewMessage(chatID, text)
+	msg.ReplyMarkup = keyboard
+	_, err := t.api.Send(msg)
+	return err
+}
+
 func (t *TelegramBotAPI) SetMyCommands(commands []tgBotAPI.BotCommand) error {
 	commandsConfig := tgBotAPI.NewSetMyCommands(commands...)
 	_, err := t.api.Request(commandsConfig)
@@ -66,12 +71,19 @@ type MockMessage struct {
 	Text   string
 }
 
-
 func (m *MockBotAPI) GetLastEvents() <-chan tgBotAPI.Update {
 	return m.updates
 }
 
 func (m *MockBotAPI) SendMessage(chatID int64, text string) error {
+	m.sent = append(m.sent, MockMessage{
+		ChatID: chatID,
+		Text:   text,
+	})
+	return nil
+}
+
+func (m *MockBotAPI) SendMessageWithKeyboard(chatID int64, text string, keyboard tgBotAPI.InlineKeyboardMarkup) error {
 	m.sent = append(m.sent, MockMessage{
 		ChatID: chatID,
 		Text:   text,
@@ -86,6 +98,3 @@ func (m *MockBotAPI) SetMyCommands(commands []tgBotAPI.BotCommand) error {
 func (m *MockBotAPI) Close() {
 	close(m.updates)
 }
-
-
-

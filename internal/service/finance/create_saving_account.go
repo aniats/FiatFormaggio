@@ -11,11 +11,11 @@ import (
 
 func (s *FinanceService) CreateSavingAccount(ctx context.Context, req *models.CreateSavingAccountRequest) (*domain.SavingAccount, error) {
 	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
-		if err := s.validateCreateSavingAccountRequest(req); err != nil {
+		if err := s.ValidateCreateSavingAccountRequest(req); err != nil {
 			return nil, errors.WrapValidationError(err)
 		}
 
-		currency, err := s.validateAndNormalizeCurrency(req.Currency)
+		currency, err := s.ValidateAndNormalizeCurrency(req.Currency)
 		if err != nil {
 			return nil, errors.WrapValidationError(err)
 		}
@@ -28,7 +28,7 @@ func (s *FinanceService) CreateSavingAccount(ctx context.Context, req *models.Cr
 		}
 
 		account := &domain.SavingAccount{
-			UserId:                  req.UserID,
+			UserID:                  req.UserID,
 			Name:                    strings.TrimSpace(req.Name),
 			AmountMinorUnits:        amountMinorUnits,
 			Currency:                currency,
@@ -54,13 +54,13 @@ func (s *FinanceService) CreateSavingAccount(ctx context.Context, req *models.Cr
 	return nil, nil
 }
 
-func (s *FinanceService) validateCreateSavingAccountRequest(req *models.CreateSavingAccountRequest) error {
+func (s *FinanceService) ValidateCreateSavingAccountRequest(req *models.CreateSavingAccountRequest) error {
 	if req == nil {
 		return errors.ErrRequestNil
 	}
 
 	if req.UserID <= 0 {
-		return errors.ErrInvalidUserID
+		return errors.ErrInValidUserID
 	}
 
 	name := strings.TrimSpace(req.Name)

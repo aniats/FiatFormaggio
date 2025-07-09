@@ -14,30 +14,21 @@ import (
 
 type DepositCreationStep int
 
-const (
-	StepName DepositCreationStep = iota
-	StepAmount
-	StepCurrency
-	StepInterestRate
-	StepExpirationDate
-	StepConfirmation
-)
-
 func (s *FinanceService) CreateDeposit(ctx context.Context, req *models.CreateDepositRequest) (*domain.Deposit, error) {
 	var result *domain.Deposit
 	var err error
 
 	var attrs []attribute.KeyValue
 	if req != nil {
-		attrs = append(attrs, attribute.Int64("user.id", int64(req.UserID)))
+		attrs = append(attrs, attribute.Int64("user.ID", int64(req.UserID)))
 	}
 
 	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
-		if err = s.validateCreateDepositRequest(req); err != nil {
+		if err = s.ValidateCreateDepositRequest(req); err != nil {
 			return nil, errors.WrapValidationError(err)
 		}
 
-		currency, currErr := s.validateAndNormalizeCurrency(req.Currency)
+		currency, currErr := s.ValidateAndNormalizeCurrency(req.Currency)
 		if currErr != nil {
 			return nil, errors.WrapValidationError(currErr)
 		}
@@ -51,7 +42,7 @@ func (s *FinanceService) CreateDeposit(ctx context.Context, req *models.CreateDe
 		}
 
 		deposit := &domain.Deposit{
-			UserId:                  req.UserID,
+			UserID:                  req.UserID,
 			Name:                    req.Name,
 			AmountMinorUnits:        amountMinorUnits,
 			InterestRateBasisPoints: interestRateBasisPoints,
@@ -79,7 +70,7 @@ func (s *FinanceService) CreateDeposit(ctx context.Context, req *models.CreateDe
 	return result, err
 }
 
-func (s *FinanceService) validateAndNormalizeCurrency(currencyInput string) (domain.CurrencyName, error) {
+func (s *FinanceService) ValidateAndNormalizeCurrency(currencyInput string) (domain.CurrencyName, error) {
 	if currencyInput == "" {
 		return domain.RUB, nil
 	}
@@ -101,8 +92,12 @@ func (s *FinanceService) isCurrencyAllowedForDeposits(currency domain.CurrencyNa
 		domain.RUB: true,
 		domain.USD: true,
 		domain.EUR: true,
-		domain.CNY: true,
 		domain.GBP: true,
+		domain.JPY: true,
+		domain.CNY: true,
+		domain.RSD: true,
+		domain.XBT: true,
+		domain.KZT: true,
 	}
 
 	return allowedCurrencies[currency]
@@ -110,7 +105,7 @@ func (s *FinanceService) isCurrencyAllowedForDeposits(currency domain.CurrencyNa
 
 func (s *FinanceService) getSupportedCurrenciesString() string {
 	allowedCurrencies := []domain.CurrencyName{
-		domain.RUB, domain.USD, domain.EUR, domain.CNY, domain.GBP,
+		domain.RUB, domain.USD, domain.EUR, domain.GBP, domain.JPY, domain.CNY, domain.RSD, domain.XBT, domain.KZT,
 	}
 
 	var currencies []string
@@ -123,13 +118,13 @@ func (s *FinanceService) getSupportedCurrenciesString() string {
 	return strings.Join(currencies, ", ")
 }
 
-func (s *FinanceService) validateCreateDepositRequest(req *models.CreateDepositRequest) error {
+func (s *FinanceService) ValidateCreateDepositRequest(req *models.CreateDepositRequest) error {
 	if req == nil {
 		return errors.ErrRequestNil
 	}
 
 	if req.UserID <= 0 {
-		return errors.ErrInvalidUserID
+		return errors.ErrInValidUserID
 	}
 
 	if strings.TrimSpace(req.Name) == "" {

@@ -11,11 +11,11 @@ import (
 
 func (s *FinanceService) CreateCashHolding(ctx context.Context, req *models.CreateCashHoldingRequest) (*domain.CashHolding, error) {
 	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
-		if err := s.validateCreateCashHoldingRequest(req); err != nil {
+		if err := s.ValidateCreateCashHoldingRequest(req); err != nil {
 			return nil, errors.WrapValidationError(err)
 		}
 
-		currency, err := s.validateAndNormalizeCurrency(req.Currency)
+		currency, err := s.ValidateAndNormalizeCurrency(req.Currency)
 		if err != nil {
 			return nil, errors.WrapValidationError(err)
 		}
@@ -23,13 +23,13 @@ func (s *FinanceService) CreateCashHolding(ctx context.Context, req *models.Crea
 		amountMinorUnits := int64(req.AmountRUB * 100)
 
 		cashHolding := &domain.CashHolding{
-			UserId:           req.UserID,
+			UserID:           req.UserID,
 			Name:             strings.TrimSpace(req.Name),
 			AmountMinorUnits: amountMinorUnits,
 			Currency:         currency,
 		}
 
-		if err := s.repo.CreateCashHolding(ctx, cashHolding); err != nil {
+		if err = s.repo.CreateCashHolding(ctx, cashHolding); err != nil {
 			return nil, errors.WrapRepositoryError(err)
 		}
 
@@ -48,13 +48,13 @@ func (s *FinanceService) CreateCashHolding(ctx context.Context, req *models.Crea
 	return nil, nil
 }
 
-func (s *FinanceService) validateCreateCashHoldingRequest(req *models.CreateCashHoldingRequest) error {
+func (s *FinanceService) ValidateCreateCashHoldingRequest(req *models.CreateCashHoldingRequest) error {
 	if req == nil {
 		return errors.ErrRequestNil
 	}
 
 	if req.UserID <= 0 {
-		return errors.ErrInvalidUserID
+		return errors.ErrInValidUserID
 	}
 
 	name := strings.TrimSpace(req.Name)

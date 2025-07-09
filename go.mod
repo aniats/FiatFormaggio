@@ -7,6 +7,8 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/pressly/goose/v3 v3.24.3
 	github.com/prometheus/client_golang v1.22.0
+	github.com/samber/lo v1.47.0
+	github.com/sashabaranov/go-openai v1.40.3
 	go.opentelemetry.io/otel v1.36.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.36.0
 	go.opentelemetry.io/otel/exporters/stdout/stdouttrace v1.36.0
@@ -28,7 +30,6 @@ require (
 	github.com/prometheus/client_model v0.6.1 // indirect
 	github.com/prometheus/common v0.62.0 // indirect
 	github.com/prometheus/procfs v0.16.1 // indirect
-	github.com/samber/lo v1.47.0 // indirect
 	github.com/sethvargo/go-retry v0.3.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.36.0 // indirect

@@ -2,11 +2,11 @@ package currency
 
 import (
 	"context"
+	"github.com/aniats/FiatFormaggio/internal/utils"
 	"log"
 	"sync"
 	"time"
 
-	"github.com/aniats/FiatFormaggio/internal/app"
 	"github.com/aniats/FiatFormaggio/internal/domain"
 	"github.com/aniats/FiatFormaggio/internal/errors"
 	"github.com/aniats/FiatFormaggio/internal/middleware"
@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	CacheUpdateInterval = 24 * time.Hour
+	CacheUpdateInterval  = 24 * time.Hour
 	MinorUnitsMultiplier = 100
 )
 
@@ -28,18 +28,19 @@ type CachedCurrencyService struct {
 	mu              sync.RWMutex
 	stopChan        chan struct{}
 	updateTicker    *time.Ticker
-	interceptor     *middleware.UnifiedInterceptor
+	interceptor     *middleware.Interceptor
 }
 
 func NewCachedCurrencyService(
 	repo repository.CurrencyRateRepository,
 	externalService ExternalCurrencyService,
+	appName string,
 ) *CachedCurrencyService {
 	return &CachedCurrencyService{
 		repo:            repo,
 		externalService: externalService,
 		stopChan:        make(chan struct{}),
-		interceptor:     middleware.NewUnifiedInterceptor(middleware.DefaultConfig("CurrencyService")),
+		interceptor:     middleware.NewInterceptor(middleware.DefaultConfig("CurrencyService"), appName),
 	}
 }
 
@@ -64,9 +65,11 @@ func (s *CachedCurrencyService) Stop() {
 }
 
 func (s *CachedCurrencyService) GetCurrencyRates(ctx context.Context) ([]domain.CurrencyRate, error) {
-	var result []domain.CurrencyRate
-	var err error
-	
+	var (
+		result []domain.CurrencyRate
+		err    error
+	)
+
 	handler := func(ctx context.Context, input interface{}) (interface{}, error) {
 		s.mu.RLock()
 		defer s.mu.RUnlock()
@@ -92,17 +95,17 @@ func (s *CachedCurrencyService) GetCurrencyRates(ctx context.Context) ([]domain.
 
 		return rates, nil
 	}
-	
+
 	wrappedHandler := s.interceptor.Chain(handler, "CachedCurrencyService.GetCurrencyRates")
 	resultInterface, err := wrappedHandler(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	if resultInterface != nil {
 		result = resultInterface.([]domain.CurrencyRate)
 	}
-	
+
 	return result, err
 }
 
@@ -169,12 +172,12 @@ func (s *CachedCurrencyService) updateCurrencyRates(ctx context.Context) error {
 			UpdatedAt:      now,
 		}
 
-		if err := s.repo.UpsertCurrencyRate(ctx, rate); err != nil {
+		if err = s.repo.UpsertCurrencyRate(ctx, rate); err != nil {
 			log.Printf("Failed to store currency rate for %s: %v", currency, err)
 			continue
 		}
 	}
 
-	log.Printf("Successfully updated %s currency rates", app.FormatInteger(int64(len(externalRates))))
+	log.Printf("Successfully updated %s currency rates", utils.FormatInteger(int64(len(externalRates))))
 	return nil
 }

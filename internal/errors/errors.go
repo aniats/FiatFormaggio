@@ -62,7 +62,7 @@ func NewTechnicalError(code, technicalMsg string) *AppError {
 		Code:         code,
 		TechnicalMsg: technicalMsg,
 		Type:         ErrorTypeTechnical,
-		UserMsg:      "❌ Произошла техническая ошибка. Попробуйте позже.", // Generic user message
+		UserMsg:      "❌ Произошла техническая ошибка. Попробуйте позже.",
 		Context:      make(map[string]interface{}),
 	}
 }
@@ -89,7 +89,7 @@ func WrapError(cause error, code, technicalMsg, userMsg string) *AppError {
 }
 
 func WrapValidationError(cause error) *AppError {
-	return NewTechnicalError(CodeValidationError, "validation failed").WithCause(cause)
+	return NewTechnicalError(CodeValidationError, "Validation failed").WithCause(cause)
 }
 
 func WrapRepositoryError(cause error) *AppError {

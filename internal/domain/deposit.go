@@ -3,8 +3,8 @@ package domain
 import "time"
 
 type Deposit struct {
-	Id                      int64
-	UserId                  UserId
+	ID                      int64
+	UserID                  UserID
 	Name                    string
 	AmountMinorUnits        int64
 	InterestRateBasisPoints int64

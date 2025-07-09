@@ -1,8 +1,8 @@
 package domain
 
 type CashHolding struct {
-	Id               int64
-	UserId           UserId
+	ID               int64
+	UserID           UserID
 	Name             string
 	AmountMinorUnits int64
 	Currency         CurrencyName

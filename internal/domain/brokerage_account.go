@@ -1,8 +1,8 @@
 package domain
 
 type BrokerageAccount struct {
-	Id               int64
-	UserId           UserId
+	ID               int64
+	UserID           UserID
 	Name             string
 	AmountMinorUnits int64
 	Broker           *string

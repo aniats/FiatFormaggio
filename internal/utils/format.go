@@ -1,12 +1,99 @@
-package app
+package utils
 
 import (
+	"fmt"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/samber/lo"
 )
 
+const DefaultMinorUnits = 100.0
+
+// FormatNumber formats a float number with thousand separators
+func FormatNumber(num float64) string {
+	str := strconv.FormatFloat(num, 'f', 2, 64)
+
+	parts := strings.Split(str, ".")
+	integerPart := parts[0]
+	decimalPart := parts[1]
+	if len(integerPart) > 3 {
+		var result strings.Builder
+		for i, digit := range integerPart {
+			if i > 0 && (len(integerPart)-i)%3 == 0 {
+				result.WriteString(",")
+			}
+			result.WriteRune(digit)
+		}
+		integerPart = result.String()
+	}
+
+	decimalPart = strings.TrimRight(decimalPart, "0")
+	if decimalPart == "" {
+		return integerPart
+	}
+	return integerPart + "." + decimalPart
+}
+
+// FormatInteger formats an integer with thousand separators
+func FormatInteger(num int64) string {
+	str := strconv.FormatInt(num, 10)
+
+	if len(str) > 3 {
+		var result strings.Builder
+		for i, digit := range str {
+			if i > 0 && (len(str)-i)%3 == 0 {
+				result.WriteString(",")
+			}
+			result.WriteRune(digit)
+		}
+		return result.String()
+	}
+	return str
+}
+
+// FormatRate formats a rate with thousand separators
+func FormatRate(rate float64) string {
+	str := strconv.FormatFloat(rate, 'f', 4, 64)
+
+	parts := strings.Split(str, ".")
+	integerPart := parts[0]
+	decimalPart := parts[1]
+	if len(integerPart) > 3 {
+		var result strings.Builder
+		for i, digit := range integerPart {
+			if i > 0 && (len(integerPart)-i)%3 == 0 {
+				result.WriteString(",")
+			}
+			result.WriteRune(digit)
+		}
+		integerPart = result.String()
+	}
+
+	decimalPart = strings.TrimRight(decimalPart, "0")
+	if decimalPart == "" {
+		return integerPart
+	}
+	return integerPart + "." + decimalPart
+}
+
+// FormatAmount formats an amount with currency symbol
+func FormatAmount(amount float64, currency string) string {
+	formattedAmount := FormatNumber(amount)
+	switch currency {
+	case "RUB":
+		return fmt.Sprintf("%s ₽", formattedAmount)
+	case "USD":
+		return fmt.Sprintf("$%s", formattedAmount)
+	case "EUR":
+		return fmt.Sprintf("€%s", formattedAmount)
+	default:
+		return fmt.Sprintf("%s %s", formattedAmount, currency)
+	}
+}
+
+// Response type constants
 type ResponseType int
 
 const (
@@ -38,6 +125,7 @@ var (
 	}
 )
 
+// LevenshteinDistance calculates the edit distance between two strings
 func LevenshteinDistance(s1, s2 string) int {
 	if len(s1) == 0 {
 		return utf8.RuneCountInString(s2)
@@ -109,7 +197,7 @@ func findClosestMatch(input string, candidates []string, maxDistance int) (strin
 
 	for _, candidate := range candidates {
 		if normalizeInput(candidate) == input {
-			return candidate, true // Exact match
+			return candidate, true
 		}
 	}
 
@@ -123,6 +211,7 @@ func findClosestMatch(input string, candidates []string, maxDistance int) (strin
 	return "", false
 }
 
+// ParseUserResponse parses user input and returns the response type
 func ParseUserResponse(input string) ResponseType {
 	input = normalizeInput(input)
 
@@ -159,26 +248,31 @@ func ParseUserResponse(input string) ResponseType {
 	return ResponseUnknown
 }
 
+// IsPositiveResponse checks if the response is positive
 func IsPositiveResponse(input string) bool {
 	return ParseUserResponse(input) == ResponseYes
 }
 
+// IsNegativeResponse checks if the response is negative
 func IsNegativeResponse(input string) bool {
 	response := ParseUserResponse(input)
 	return response == ResponseNo || response == ResponseCancel
 }
 
+// IsSkipResponse checks if the response indicates skipping
 func IsSkipResponse(input string) bool {
 	return ParseUserResponse(input) == ResponseSkip
 }
 
+// IsValidResponse checks if the response is valid
 func IsValidResponse(input string) bool {
 	return ParseUserResponse(input) != ResponseUnknown
 }
 
+// GetSuggestionMessage returns a message with response suggestions
 func GetSuggestionMessage() string {
 	return `❓ Пожалуйста, используйте один из вариантов:
-✅ Для подтверждения: "да", "yes", "ок", "подтверждаю"
-❌ Для отказа: "нет", "no", "отмена"
-⏭️ Для пропуска: "пропустить", "skip"`
+				✅ Для подтверждения: "да", "yes", "ок", "подтверждаю"
+				❌ Для отказа: "нет", "no", "отмена"
+				⏭️ Для пропуска: "пропустить", "skip"`
 }

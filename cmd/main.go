@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"github.com/aniats/FiatFormaggio/internal/tracing"
+	"github.com/aniats/FiatFormaggio/internal/utils"
 	"log"
 	"net/http"
 	"os"
@@ -16,13 +18,15 @@ import (
 	"github.com/aniats/FiatFormaggio/internal/repository"
 	"github.com/aniats/FiatFormaggio/internal/repository/postgres"
 	"github.com/aniats/FiatFormaggio/internal/service/cbr"
+	"github.com/aniats/FiatFormaggio/internal/service/chatgpt"
 	"github.com/aniats/FiatFormaggio/internal/service/currency"
 	"github.com/aniats/FiatFormaggio/internal/service/finance"
+
+	_ "net/http/pprof"
 
 	"github.com/joho/godotenv"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/otel"
-	_ "net/http/pprof"
 )
 
 type Application struct {
@@ -41,7 +45,9 @@ type Application struct {
 type Config struct {
 	DatabaseURL      string
 	TelegramBotToken string
+	ChatGPTAPIKey    string
 	MetricsPort      string
+	AppName          string
 }
 
 func main() {
@@ -55,7 +61,10 @@ func run() error {
 		log.Fatal("Error loading .env file")
 	}
 
-	config := loadConfig()
+	config, err := loadConfig()
+	if err != nil {
+		return errors.WrapConfigError(err)
+	}
 
 	application, err := NewApplication(config)
 	if err != nil {
@@ -66,7 +75,7 @@ func run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if err := application.Start(ctx); err != nil {
+	if err = application.Start(ctx); err != nil {
 		return errors.WrapServiceError(err)
 	}
 
@@ -103,8 +112,8 @@ func (a *Application) Start(ctx context.Context) error {
 		return errors.WrapServiceError(err)
 	}
 
-	if err := a.testServices(ctx); err != nil {
-		log.Printf("Service test error: %v", err)
+	if err := a.healthCheck(ctx); err != nil {
+		log.Printf("Service health check error: %v", err)
 	}
 
 	metrics.Init()
@@ -152,7 +161,7 @@ func (a *Application) Cleanup() {
 }
 
 func (a *Application) initTracing() error {
-	cleanup, err := app.InitTracing()
+	cleanup, err := tracing.InitTracing(a.config.AppName)
 	if err != nil {
 		return err
 	}
@@ -161,15 +170,11 @@ func (a *Application) initTracing() error {
 }
 
 func (a *Application) initRepository() error {
-	tracer := otel.Tracer(domain.AppName)
+	tracer := otel.Tracer(a.config.AppName)
 	ctx, span := tracer.Start(context.Background(), "Application.initRepository")
 	defer span.End()
 
-	if a.config.DatabaseURL == "" {
-		return errors.NewTechnicalError(errors.CodeConfigError, "DATABASE_URL environment variable is required")
-	}
-
-	repo, err := postgres.New(a.config.DatabaseURL)
+	repo, err := postgres.New(a.config.DatabaseURL, a.config.AppName)
 	if err != nil {
 		return errors.WrapDatabaseError(err)
 	}
@@ -177,7 +182,7 @@ func (a *Application) initRepository() error {
 	healthCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	if err := repo.HealthCheck(healthCtx); err != nil {
+	if err = repo.HealthCheck(healthCtx); err != nil {
 		return errors.WrapDatabaseError(err)
 	}
 
@@ -190,13 +195,16 @@ func (a *Application) initServices() error {
 	httpClient := &http.Client{
 		Timeout: 10 * time.Second,
 	}
-	a.cbrService = cbr.NewCBRService(httpClient)
+	a.cbrService = cbr.NewCBRService(httpClient, a.config.AppName)
 	log.Println("✅ CBR service initialized successfully")
 
-	a.currencyService = currency.NewCachedCurrencyService(a.repository, a.cbrService)
+	a.currencyService = currency.NewCachedCurrencyService(a.repository, a.cbrService, a.config.AppName)
 	log.Println("✅ Currency caching service initialized successfully")
 
-	a.financeService = finance.NewFinanceService(a.repository, a.currencyService)
+	chatgptClient := chatgpt.NewClient(a.config.ChatGPTAPIKey)
+	log.Println("✅ ChatGPT client initialized successfully")
+
+	a.financeService = finance.NewFinanceService(a.repository, a.currencyService, a.config.AppName, chatgptClient)
 	log.Println("✅ Finance service initialized successfully")
 
 	return nil
@@ -207,7 +215,7 @@ func (a *Application) initBot() error {
 		return errors.NewTechnicalError(errors.CodeConfigError, "TELEGRAM_BOT_TOKEN environment variable is required")
 	}
 
-	bot, err := app.NewBotFromToken(a.config.TelegramBotToken, a.financeService, a.currencyService)
+	bot, err := app.NewBotFromToken(a.config.TelegramBotToken, a.financeService, a.currencyService, a.config.AppName)
 	if err != nil {
 		return errors.WrapServiceError(err)
 	}
@@ -217,26 +225,26 @@ func (a *Application) initBot() error {
 	return nil
 }
 
-func (a *Application) testServices(ctx context.Context) error {
-	tracer := otel.Tracer(domain.AppName)
+func (a *Application) healthCheck(ctx context.Context) error {
+	tracer := otel.Tracer(a.config.AppName)
 	ctx, span := tracer.Start(ctx, "Application.testServices")
 	defer span.End()
 
-	userID := domain.UserId(123456789)
+	userID := domain.UserID(123456789)
 	deposits, err := a.financeService.GetDepositsByUserID(ctx, userID)
 	if err != nil {
 		return errors.WrapServiceError(err)
 	}
 	log.Printf("✅ Successfully retrieved %s deposits for user %s",
-		app.FormatInteger(int64(len(deposits))),
-		app.FormatInteger(int64(userID)))
+		utils.FormatInteger(int64(len(deposits))),
+		utils.FormatInteger(int64(userID)))
 
 	rates, err := a.currencyService.GetCurrencyRates(ctx)
 	if err != nil {
 		return errors.WrapServiceError(err)
 	}
 	log.Printf("✅ Successfully retrieved cached currency rates: %s currencies",
-		app.FormatInteger(int64(len(rates))))
+		utils.FormatInteger(int64(len(rates))))
 
 	return nil
 }
@@ -249,12 +257,29 @@ func (a *Application) startMetricsServer() {
 	}
 }
 
-func loadConfig() *Config {
-	return &Config{
-		DatabaseURL:      os.Getenv("DATABASE_URL"),
-		TelegramBotToken: os.Getenv("TELEGRAM_BOT_TOKEN"),
-		MetricsPort:      getEnvWithDefault("METRICS_PORT", ":8080"),
+func loadConfig() (*Config, error) {
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		return &Config{}, errors.NewTechnicalError(errors.CodeConfigError, "DATABASE_URL environment variable is required")
 	}
+
+	botToken := os.Getenv("TELEGRAM_BOT_TOKEN")
+	if botToken == "" {
+		return &Config{}, errors.NewTechnicalError(errors.CodeConfigError, "TELEGRAM_BOT_TOKEN environment variable is required")
+	}
+
+	chatGPTKey := os.Getenv("CHATGPT_API_KEY")
+	if chatGPTKey == "" {
+		return &Config{}, errors.NewTechnicalError(errors.CodeConfigError, "CHATGPT_API_KEY environment variable is required")
+	}
+
+	return &Config{
+		DatabaseURL:      databaseURL,
+		TelegramBotToken: botToken,
+		ChatGPTAPIKey:    chatGPTKey,
+		MetricsPort:      getEnvWithDefault("METRICS_PORT", ":8080"),
+		AppName:          getEnvWithDefault("APP_NAME", "fiatformaggio"),
+	}, nil
 }
 
 func getEnvWithDefault(key, defaultValue string) string {

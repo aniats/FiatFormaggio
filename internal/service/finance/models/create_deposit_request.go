@@ -1,12 +1,13 @@
 package models
 
 import (
-	"github.com/aniats/FiatFormaggio/internal/domain"
 	"time"
+
+	"github.com/aniats/FiatFormaggio/internal/domain"
 )
 
 type CreateDepositRequest struct {
-	UserID              domain.UserId
+	UserID              domain.UserID
 	Name                string
 	AmountRUB           float64
 	InterestRatePercent *float64

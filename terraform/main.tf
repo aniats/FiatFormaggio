@@ -8,39 +8,36 @@ terraform {
 }
 
 provider "yandex" {
-  zone                     = "ru-central1-a"
   service_account_key_file = "./key.json"
-  folder_id                = "b1gjq7ddocfsrtp16bho"
+  folder_id                = "b1goidip2cbgbl9nauiu"
   profile                  = "sa-terraform"
+  zone                     = "ru-central1-d"
 }
 
 resource "yandex_compute_disk" "boot-disk-1" {
   name     = "boot-disk-1"
   type     = "network-hdd"
-  zone     = "ru-central1-a"
+  zone     = "ru-central1-d"
   size     = "20"
-  image_id = "fd85u0rct32prepgjlv0"
+  image_id = "fd845dr9j4h2aaq1m6ko"
 }
 
-resource "yandex_vpc_network" "network-1" {
-  name = "network1"
-}
-
-resource "yandex_vpc_subnet" "subnet-1" {
-  name           = "subnet1"
-  zone           = "ru-central1-a"
-  network_id     = yandex_vpc_network.network-1.id
-  v4_cidr_blocks = ["192.168.10.0/24"]
+resource "yandex_compute_disk" "boot-disk-2" {
+  name     = "boot-disk-2"
+  type     = "network-hdd"
+  zone     = "ru-central1-d"
+  size     = "20"
+  image_id = "fd845dr9j4h2aaq1m6ko"
 }
 
 resource "yandex_compute_instance" "vm-1" {
   name        = "terraform1"
-  platform_id = "standard-v2"
+  platform_id = "standard-v3"
+
 
   resources {
-    cores         = 2
-    memory        = 2
-    core_fraction = 5
+    cores  = 2
+    memory = 2
   }
 
   boot_disk {
@@ -53,8 +50,43 @@ resource "yandex_compute_instance" "vm-1" {
   }
 
   metadata = {
+    ssh-keys = "${file("./meta.txt")}"
+  }
+}
+
+resource "yandex_compute_instance" "vm-2" {
+  name        = "terraform2"
+  platform_id = "standard-v3"
+
+
+  resources {
+    cores  = 2
+    memory = 2
+  }
+
+  boot_disk {
+    disk_id = yandex_compute_disk.boot-disk-2.id
+  }
+
+  network_interface {
+    subnet_id = yandex_vpc_subnet.subnet-1.id
+    nat       = true
+  }
+
+  metadata = {
     user-data = "${file("./meta.txt")}"
   }
+}
+
+resource "yandex_vpc_network" "network-1" {
+  name = "network1"
+}
+
+resource "yandex_vpc_subnet" "subnet-1" {
+  name           = "subnet1"
+  zone           = "ru-central1-d"
+  network_id     = yandex_vpc_network.network-1.id
+  v4_cidr_blocks = ["192.168.10.0/24"]
 }
 
 output "internal_ip_address_vm_1" {
@@ -63,4 +95,12 @@ output "internal_ip_address_vm_1" {
 
 output "external_ip_address_vm_1" {
   value = yandex_compute_instance.vm-1.network_interface.0.nat_ip_address
+}
+
+output "internal_ip_address_vm_2" {
+  value = yandex_compute_instance.vm-2.network_interface.0.ip_address
+}
+
+output "external_ip_address_vm_2" {
+  value = yandex_compute_instance.vm-2.network_interface.0.nat_ip_address
 }

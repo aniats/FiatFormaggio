@@ -5,7 +5,7 @@ import (
 )
 
 type CreateBrokerageAccountRequest struct {
-	UserID      domain.UserId
+	UserID      domain.UserID
 	Name        string
 	AmountRUB   float64
 	Currency    string

@@ -3,9 +3,11 @@ package app
 import (
 	"context"
 	"fmt"
+	"github.com/aniats/FiatFormaggio/internal/utils"
 
 	"github.com/aniats/FiatFormaggio/internal/domain"
 	"github.com/aniats/FiatFormaggio/internal/errors"
+	"github.com/aniats/FiatFormaggio/internal/tracing"
 )
 
 func (b *Bot) sendCurrencyRatesCommand(ctx context.Context, chatID int64) {
@@ -14,7 +16,7 @@ func (b *Bot) sendCurrencyRatesCommand(ctx context.Context, chatID int64) {
 	}
 
 	params := map[string]interface{}{
-		"chat_id": chatID,
+		tracing.ParamChatID: chatID,
 	}
 
 	wrappedHandler := b.interceptor.Chain(handler, "Bot.sendCurrencyRatesCommand")
@@ -34,6 +36,7 @@ func (b *Bot) processCurrencyRatesCommand(ctx context.Context, chatID int64) err
 	if len(rates) == 0 {
 		noRatesErr := errors.ErrCurrencyRatesUnavailable
 		b.sendMessage(chatID, errors.GetUserMessage(noRatesErr))
+		b.sendMainMenu(chatID)
 		return noRatesErr
 	}
 
@@ -51,7 +54,7 @@ func (b *Bot) processCurrencyRatesCommand(ctx context.Context, chatID int64) err
 		for _, rate := range rates {
 			if rate.Currency == currencyCode {
 				unitRate := float64(rate.RateMinorUnits) / 100.0
-				text += fmt.Sprintf("%s: %s ₽\n", rate.Currency, FormatRate(unitRate))
+				text += fmt.Sprintf("%s: %s ₽\n", rate.Currency, utils.FormatRate(unitRate))
 				majorRatesShown[currencyCode] = true
 				break
 			}
@@ -63,12 +66,13 @@ func (b *Bot) processCurrencyRatesCommand(ctx context.Context, chatID int64) err
 	for _, rate := range rates {
 		if !majorRatesShown[rate.Currency] {
 			unitRate := float64(rate.RateMinorUnits) / 100.0
-			text += fmt.Sprintf("%s: %s ₽\n", rate.Currency, FormatRate(unitRate))
+			text += fmt.Sprintf("%s: %s ₽\n", rate.Currency, utils.FormatRate(unitRate))
 		}
 	}
 
-	text += fmt.Sprintf("\n📊 Всего валют: %s", FormatInteger(int64(len(rates))))
+	text += fmt.Sprintf("\n📊 Всего валют: %s", utils.FormatInteger(int64(len(rates))))
 
 	b.sendMessage(chatID, text)
+	b.sendMainMenu(chatID)
 	return nil
 }

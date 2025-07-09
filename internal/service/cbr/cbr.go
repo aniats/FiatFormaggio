@@ -17,11 +17,11 @@ import (
 
 type CBRService struct {
 	client      *http.Client
-	interceptor *middleware.UnifiedInterceptor
+	interceptor *middleware.Interceptor
 }
 
-func NewCBRService(client *http.Client) *CBRService {
-	interceptor := middleware.NewUnifiedInterceptor(middleware.DefaultConfig("CBRService"))
+func NewCBRService(client *http.Client, appName string) *CBRService {
+	interceptor := middleware.NewInterceptor(middleware.DefaultConfig("CBRService"), appName)
 	return &CBRService{
 		client:      client,
 		interceptor: interceptor,
@@ -57,7 +57,7 @@ func (s *CBRService) GetCurrencyRates(ctx context.Context, date time.Time) ([]*d
 		decoder.CharsetReader = charset.NewReaderLabel
 
 		var valCurs ValCurs
-		if err := decoder.Decode(&valCurs); err != nil {
+		if err = decoder.Decode(&valCurs); err != nil {
 			return nil, errors.WrapExternalAPIError(err)
 		}
 

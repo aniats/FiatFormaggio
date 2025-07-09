@@ -56,7 +56,7 @@ func main() {
 	}
 	defer db.Close()
 
-	if err := goose.SetDialect(driver); err != nil {
+	if err = goose.SetDialect(driver); err != nil {
 		log.Fatalf("migrate: failed to set dialect: %v\n", err)
 	}
 
@@ -65,7 +65,7 @@ func main() {
 		arguments = args[3:]
 	}
 
-	if err := goose.Run(command, db, *dir, arguments...); err != nil {
+	if err = goose.Run(command, db, *dir, arguments...); err != nil {
 		log.Fatalf("migrate %v: %v", command, err)
 	}
 }
